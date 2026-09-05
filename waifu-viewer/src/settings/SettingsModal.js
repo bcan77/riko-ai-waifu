@@ -294,6 +294,15 @@ export function mountSettingsModal(opts = {}){
 
           <div class="settings-panel ${activeTab==='app'?'active':''}" data-panel="app">
             <h3>App & Display</h3>
+            <div class="settings-card" style="margin-bottom:10px">
+              <h4>Language / Dil</h4>
+              <div class="settings-row"><label>Language — Dil
+                <select data-field="locale">
+                  <option value="tr" ${s.locale==='tr'?'selected':''}>🇹🇷 Türkçe</option>
+                  <option value="en" ${s.locale==='en'?'selected':''}>🇬🇧 English</option>
+                </select></label></div>
+              <div class="settings-hint">Setup wizard + docs language. / Kurulum sihirbazı ve döküman dili.</div>
+            </div>
             <div class="settings-grid">
               <div class="settings-card">
                 <h4>Backend</h4>

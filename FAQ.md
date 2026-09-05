@@ -1,65 +1,69 @@
-# FAQ — Riko AI Waifu
+> **Dil / Language:** 🇹🇷 Türkçe (bu dosya) | [🇬🇧 English](FAQ.en.md)
 
-## General
+# SSS — Riko AI Waifu
 
-**What is this?**
-MMD viewer (Three.js `MMDLoader`/`MMDAnimationHelper` + `ammo.js` physics) coupled to a FastAPI backend that streams LLM → TTS → phoneme→viseme into morph targets. Characters are `.wpkg` bundles.
+## Genel
 
-**Do I need to pay for LLM/TTS?**
-No. OpenRouter free models (`poolside/laguna-s-2.1:free` etc.) and Kokoro local TTS (with sine mock fallback) let you run offline. Set `ELEVENLABS_API_KEY`/`FISH_API_KEY` only for premium voices.
+**Bu nedir?**
+MMD görüntüleyici (Three.js `MMDLoader`/`MMDAnimationHelper` + `ammo.js` fizik) ile FastAPI backend'in birleşimi; LLM → TTS → fonem→viseme akışını morph targetlara aktarır. Karakterler `.wpkg` paketleridir.
 
-## Setup
+**LLM/TTS için ödeme yapmam gerekiyor mu?**
+Hayır. OpenRouter ücretsiz modeller (`poolside/laguna-s-2.1:free` vb.) ve Kokoro yerel TTS (sine sahte yedek ile) çevrimdışı çalışmana izin verir. Sadece premium sesler için `ELEVENLABS_API_KEY`/`FISH_API_KEY` ayarla.
 
-**Backend won't start — `ModuleNotFoundError: fastapi`?**
-Activate venv: `source backend/.venv/bin/activate` then `pip install -r backend/requirements.txt`.
+## Kurulum
 
-**Frontend shows `Booting…` forever / WebSocket fails?**
-Backend not reachable at `ws://localhost:8000/ws/talk`. Check `uvicorn` on `:8000`, `CORS_ORIGINS` includes `http://localhost:5173`, and `waifu-viewer/vite.config.js` proxy target matches.
+**Backend başlamıyor — `ModuleNotFoundError: fastapi`?**
+Venv'i aktif et: `source backend/.venv/bin/activate` sonra `pip install -r backend/requirements.txt`.
 
-**Port 8000 busy?**
-Electron auto-falls back to `:8001` (`apps/desktop/electron/main.js`). Or `lsof -i :8000` and kill, or change `PORT` in `backend/.env` and Vite proxy.
+**Frontend `Booting…` takılı kalıyor / WebSocket başarısız?**
+Backend `ws://localhost:8000/ws/talk` adresinde erişilemiyor. `uvicorn` `:8000` üzerinde mi, `CORS_ORIGINS` `http://localhost:5173` içeriyor mu ve `waifu-viewer/vite.config.js` proxy hedefi doğru mu kontrol et.
 
-## Keys & Models
+**Port 8000 meşgul?**
+Electron otomatik olarak `:8001`'e geçer (`apps/desktop/electron/main.js`). Veya `lsof -i :8000` ile öldür, ya da `backend/.env` içinde `PORT` ve Vite proxy'yi değiştir.
 
-**Where do I set API keys?**
-Either `backend/.env` (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `ELEVENLABS_API_KEY`, `FISH_API_KEY`) or in-app **Settings → Keys** (`POST /api/keys` → persists to `backend/user_keys.json`). The latter hot-reloads without restart.
+## Anahtarlar & Modeller
 
-**Which OpenRouter models work?**
-Default `google/gemini-2.0-flash-001` (not free); free examples: `poolside/laguna-s-2.1:free`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free`, etc. Full list in `waifu-viewer/src/settings/SettingsModal.js` `uh` array and `backend/.env.example`.
+**API anahtarlarını nerede ayarlarım?**
+Ya `backend/.env` (`OPENROUTER_API_KEY`, `GROQ_API_KEY`, `ELEVENLABS_API_KEY`, `FISH_API_KEY`) ya da uygulama içi **Ayarlar → Anahtarlar** (`POST /api/keys` → `backend/user_keys.json` içine kaydeder). İkincisi yeniden başlatmadan hot-reload olur.
 
-**How to change character voice?**
-`VOICE_ELLEN/JANE/ZHU` in `.env` (`kokoro-af_sky` etc.) or `.wpkg` manifest `voice.en/ja`. Japanese auto-switches to `jf_alpha/jf_gongitsune/jf_sakura` when `KOKORO_LANG=ja` detected. Override per-request via `voice_id`.
+**Hangi OpenRouter modelleri çalışır?**
+Varsayılan `google/gemini-2.0-flash-001` (ücretsiz değil); ücretsiz örnekler: `poolside/laguna-s-2.1:free`, `nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free` vb. Tam liste `waifu-viewer/src/settings/SettingsModal.js` `FREE_MODELS` dizisinde ve `backend/.env.example` içinde.
 
-## Assets
+**Karakter sesini nasıl değiştiririm?**
+`.env` içinde `VOICE_ELLEN/JANE/ZHU` (`kokoro-af_sky` vb.) veya `.wpkg` manifest `voice.en/ja`. `KOKORO_LANG=ja` algılandığında Japonca otomatik `jf_alpha/jf_gongitsune/jf_sakura` geçer. İstek başına `voice_id` ile ezebilirsin.
 
-**Why is the repo ~460 MB?**
-`characters/*.wpkg` (174 MB) + `waifu-viewer/public/models` (164 MB) + `backgrounds` (51 MB). Track with Git LFS if desired (`git lfs track "characters/*.wpkg" "waifu-viewer/public/models/**"`). Source `MMD_Models_MiHoyo/` was stripped — add locally to run `npm run convert`.
+## Varlıklar
 
-**Can I add my own character?**
-Yes — create a folder with `model/model.pmx`, `motions/idle.vmd`, `manifest.json` (see `packages/wpkg/src/manifest.js`), then `npm run wpkg:pack -- <srcDir> <out.wpkg>` and drop into `characters/`. Or use in-app **WPKG Editor**.
+**Neden repo ~460 MB?**
+`characters/*.wpkg` (174 MB) + `waifu-viewer/public/models` (164 MB) + `backgrounds` (51 MB). İstersen Git LFS ile takip et (`git lfs track "characters/*.wpkg" "waifu-viewer/public/models/**"`). Kaynak `MMD_Models_MiHoyo/` boyut için çıkarıldı — `npm run convert` çalıştırmak için yerel olarak ekle.
 
-**Backgrounds / VMD not appearing?**
-`VMD_Animations/` → auto-synced to `public/vmd` and `GET /api/vmd` (see `vite.config.js:vmdLiveSync`). `backgrounds/` → `GET /api/backgrounds` and served at `/backgrounds/<path>` (`backgroundsLiveSync`). Ensure files are `.vmd`/`.fbx`/image and check `GET http://localhost:5173/api/backgrounds` (frontend-served, not backend).
+**Kendi karakterimi ekleyebilir miyim?**
+Evet — `model/model.pmx`, `motions/idle.vmd`, `manifest.json` içeren bir klasör oluştur (bkz. `packages/wpkg/src/manifest.js`), sonra `npm run wpkg:pack -- <srcDir> <out.wpkg>` ile `characters/` içine at. Veya uygulama içi **WPKG Editörü** kullan.
 
-## Runtime
+**Arkaplanlar / VMD görünmüyor?**
+`VMD_Animations/` → `public/vmd` ve `GET /api/vmd` ile otomatik senkron (`vite.config.js:vmdLiveSync`). `backgrounds/` → `GET /api/backgrounds` ve `/backgrounds/<path>` altında sunulur (`backgroundsLiveSync`). Dosyaların `.vmd`/`.fbx`/resim olduğundan emin ol ve `GET http://localhost:5173/api/backgrounds` kontrol et (frontend tarafından sunulur, backend değil).
 
-**No audio but viseme moves?**
-Kokoro not installed — `pip install kokoro-onnx` or set `TTS_PROVIDER=elevenlabs` + key. The mock still drives 60fps viseme frames for testing.
+## Çalışma Zamanı
 
-**Physics explodes / model falls through floor?**
-Toggle **Settings → Physics/IK**, adjust `gravity` (−18 default), or **Reset Pose**. See `sanitizePhysics` in `waifu-viewer/src/main.js`.
+**Ses yok ama viseme oynuyor?**
+Kokoro kurulu değil — `pip install kokoro-onnx` veya `TTS_PROVIDER=elevenlabs` + anahtar ayarla. Sahte mod yine de test için 60fps viseme kareleri üretir.
 
-**How to change affinity / hitbox / eye-tracking?**
-Affinity via chat/hitbox (raycast zones in `services/tools.js`) persisted to `localStorage waifu:affinity`. Toggles in Settings (`hitboxing`, `eyeTracking`, `prosodyRate/Pitch`).
+**Fizik patlıyor / model zeminden düşüyor?**
+**Ayarlar → Physics/IK** değiştir, `gravity` (−18 varsayılan) ayarla veya **Reset Pose** yap. `waifu-viewer/src/main.js` içindeki `sanitizePhysics` bölümüne bak.
 
-**How does streaming work?**
-Client sends `{"type":"chat","text":"...","modelId":"ellen"}` over `WS /ws/talk`; server streams `llm_start` → `token` → `llm_end` (JSON `LLMStructuredOutput` with `text/emotion/gesture/intensity`) → `tts_start` → `viseme+audio` chunks → `animation` → `done`. Send `{"type":"stop"}` to barge-in (cancels `asyncio` task via `ws/manager.py`).
+**Yakınlık / hitbox / göz takibi nasıl değiştirilir?**
+Yakınlık sohbet/hitbox ( `services/tools.js` içindeki raycast bölgeleri) üzerinden `localStorage waifu:affinity` içine kaydedilir. Ayarlar içinde `hitboxing`, `eyeTracking`, `prosodyRate/Pitch` ile aç/kapat.
 
-## Desktop
+**Akış nasıl çalışır?**
+İstemci `WS /ws/talk` üzerinden `{"type":"chat","text":"...","modelId":"ellen"}` gönderir; sunucu `llm_start` → `token` → `llm_end` (JSON `LLMStructuredOutput` → `text/emotion/gesture/intensity`) → `tts_start` → `viseme+audio` parçaları → `animation` → `done` akışı yapar. Barge-in için `{"type":"stop"}` gönder (`asyncio` görevi `ws/manager.py` ile iptal edilir).
 
-**Electron shows blank / `ERR_CONNECTION_REFUSED`?**
-Vite dev server not ready. `npm run desktop:dev` uses `wait-on http://localhost:5173` — wait for `VITE v8.x ready` before Electron loads.
+## Masaüstü
 
-## Still stuck?
+**Electron boş / `ERR_CONNECTION_REFUSED` gösteriyor?**
+Vite dev sunucusu hazır değil. `npm run desktop:dev` `wait-on http://localhost:5173` kullanır — Electron yüklenmeden önce `VITE v8.x ready` bekle.
 
-Check `backend/app/main.py`, `backend/app/ws/talk.py`, `waifu-viewer/vite.config.js` comments, and the browser console / `uvicorn --log-level debug`.
+## Hala takıldın mı?
+
+`backend/app/main.py`, `backend/app/ws/talk.py`, `waifu-viewer/vite.config.js` yorumlarına ve tarayıcı konsolu / `uvicorn --log-level debug` çıktısına bak.
+
+> **Dil:** [🇹🇷 Türkçe](FAQ.md) | [🇬🇧 English](FAQ.en.md)

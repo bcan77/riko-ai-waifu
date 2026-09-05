@@ -5,7 +5,9 @@
  */
 
 export const DEFAULTS = {
-  version: 9,
+  version: 10,
+  // Locale
+  locale: 'tr',               // 'en' | 'tr'
   // Characters
   modelId: 'ellen',
   outfitId: 'default',
@@ -129,6 +131,8 @@ function sanitize(raw){
   o.panelCollapsed = raw.panelCollapsed !== false
   if (typeof raw.panelCollapsed === 'boolean') o.panelCollapsed = raw.panelCollapsed
   o.theme = typeof raw.theme === 'string' ? raw.theme : DEFAULTS.theme
+  // locale
+  o.locale = ['en','tr'].includes(raw.locale) ? raw.locale : DEFAULTS.locale
   // backgrounds
   o.backgroundId = typeof raw.backgroundId === 'string' && raw.backgroundId ? raw.backgroundId : DEFAULTS.backgroundId
   o.backgroundBlur = clamp(parseFloat(raw.backgroundBlur ?? DEFAULTS.backgroundBlur), 0, 20)
@@ -192,6 +196,11 @@ export function load(){
       clean.ambientIntensity = DEFAULTS.ambientIntensity
       clean.exposure = DEFAULTS.exposure
     }
+    clean.version = 9
+  }
+  // migrate v9 → v10: add locale (default tr)
+  if ((clean.version||0) < 10) {
+    if (!clean.locale || !['en','tr'].includes(clean.locale)) clean.locale = DEFAULTS.locale
     clean.version = DEFAULTS.version
   }
   _cache = clean

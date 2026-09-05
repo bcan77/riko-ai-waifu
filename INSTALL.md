@@ -1,8 +1,10 @@
-# Install Guide — Riko AI Waifu
+> **Dil / Language:** 🇹🇷 Türkçe (bu dosya) | [🇬🇧 English](INSTALL.en.md)
 
-Step-by-step for Windows / Linux / macOS. Requires **Node ≥18** and **Python 3.11+**.
+# Kurulum Kılavuzu — Riko AI Waifu
 
-## 1) Prerequisites
+Windows / Linux / macOS için adım adım. **Node ≥18** ve **Python 3.11+** gerektirir.
+
+## 1) Ön Koşullar
 
 ```bash
 node -v   # ≥18
@@ -11,9 +13,9 @@ pip --version
 git --version
 ```
 
-Optional: `ffmpeg` (audio), `kokoro-onnx` deps, Electron build tools (`npm run desktop:build` needs OS-native deps).
+Opsiyonel: `ffmpeg` (ses), `kokoro-onnx` bağımlılıkları, Electron derleme araçları (`npm run desktop:build` OS'e özel bağımlılıklar ister).
 
-## 2) Clone & install JS deps
+## 2) Klonla & JS bağımlılıklarını kur
 
 ```bash
 git clone https://github.com/bcan77/riko-ai-waifu.git
@@ -21,7 +23,7 @@ cd riko-ai-waifu
 npm install
 ```
 
-This installs root workspaces: `waifu-viewer`, `packages/wpkg`, `apps/desktop`. If disk-tight, skip desktop: `npm install --workspace=waifu-viewer --workspace=@waifu/wpkg`.
+Bu kök workspaceleri kurar: `waifu-viewer`, `packages/wpkg`, `apps/desktop`. Disk darsa masaüstünü atla: `npm install --workspace=waifu-viewer --workspace=@waifu/wpkg`.
 
 ## 3) Backend
 
@@ -34,18 +36,18 @@ python -m venv .venv
 
 pip install -r requirements.txt
 cp .env.example .env
-# Edit .env — at minimum set one LLM key (see Configuration in README.md)
+# .env düzenle — en az bir LLM anahtarı ayarla (README.md Yapılandırma bölümüne bak)
 # OPENROUTER_API_KEY=sk-or-v1-...
-# or GROQ_API_KEY=gsk_...
+# veya GROQ_API_KEY=gsk_...
 
 uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
-Verify: `http://localhost:8000/health` → `{"ok":true,...}`, `http://localhost:8000/api/config`.
+Doğrula: `http://localhost:8000/health` → `{"ok":true,...}`, `http://localhost:8000/api/config`.
 
-> **No key?** The backend still boots — chat returns a mock message and TTS emits a sine mock so you can test viseme without credentials.
+> **Anahtar yok mu?** Backend yine de açılır — sohbet sahte bir mesaj döner ve TTS viseme'yi test edebilmen için sine sahte ses üretir.
 
-### Docker alternative
+### Docker alternatifi
 
 ```bash
 cd backend
@@ -55,49 +57,49 @@ docker run -p 8000:8000 --env-file .env waifu-backend
 
 ## 4) Frontend
 
-In a **second terminal** from repo root:
+**İkinci terminalde** repo kökünden:
 
 ```bash
-npm run dev                  # waifu-viewer on http://localhost:5173
-# production:
+npm run dev                  # waifu-viewer http://localhost:5173 üzerinde
+# üretim:
 npm run build                # → waifu-viewer/dist
 npm run preview
 ```
 
-Vite (`waifu-viewer/vite.config.js`) proxies `/health`, `/api/chat|wpkg|memory|system|tools|keys|settings|version|config`, and `/ws` to `localhost:8000`. Keep backend running.
+Vite (`waifu-viewer/vite.config.js`) `/health`, `/api/chat|wpkg|memory|system|tools|keys|settings|version|config` ve `/ws` isteklerini `localhost:8000`'a proxy'ler. Backend'i açık tut.
 
-## 5) Desktop (optional)
+## 5) Masaüstü (opsiyonel)
 
 ```bash
-npm run desktop:dev          # vite + electron (waits for :5173)
-# build installer:
+npm run desktop:dev          # vite + electron (:5173 bekler)
+# yükleyici derle:
 npm run desktop:build
-# or run built dist:
+# veya derlenmiş dist'i çalıştır:
 npm --prefix apps/desktop run start
 npm --prefix apps/desktop run start:headless   # --no-sandbox --disable-gpu
 ```
 
-Electron (`apps/desktop/electron/main.js`) auto-spawns `uvicorn` on `:8000` (or `:8001` if busy).
+Electron (`apps/desktop/electron/main.js`) `uvicorn`'u otomatik olarak `:8000` (meşgulse `:8001`) üzerinde başlatır.
 
-## 6) WPKG characters
+## 6) WPKG karakterler
 
-Bundles are prebuilt in `characters/*.wpkg` (174 MB). In-app: **Panel → WPKG → Import/Validate/Save**. To rebuild from source:
+Paketler `characters/*.wpkg` içinde önceden derlenmiş (174 MB). Uygulama içinde: **Panel → WPKG → İçe aktar/Doğrula/Kaydet**. Kaynaktan yeniden derlemek için:
 
 ```bash
-# requires MMD_Models_MiHoyo/ locally (not included — stripped for size)
+# Yerelde MMD_Models_MiHoyo/ gerektirir (dahil değil — boyut için çıkarıldı)
 npm run convert              # → characters/*.wpkg
 npm run wpkg:pack -- <srcDir> <out.wpkg>
 npm --prefix packages/wpkg test
 ```
 
-## 7) Verify end-to-end
+## 7) Uçtan uca doğrulama
 
-1. Backend logs `Uvicorn running on http://0.0.0.0:8000`, frontend `VITE v8.x ready`.
-2. Open `http://localhost:5173` → status `Booting…` → `Ready`.
-3. Chat → `hello` → see `llm_start` → streaming tokens → `tts_start` → audio + lip-sync (`a,i,u,e,o` at 60fps).
-4. `GET http://localhost:8000/api/wpkg/list` lists `.wpkg` files.
+1. Backend logu `Uvicorn running on http://0.0.0.0:8000`, frontend `VITE v8.x ready`.
+2. `http://localhost:5173` aç → durum `Booting…` → `Ready`.
+3. Sohbet → `merhaba` → `llm_start` → akan tokenler → `tts_start` → ses + dudak senkronu (`a,i,u,e,o` 60fps) gör.
+4. `GET http://localhost:8000/api/wpkg/list` `.wpkg` dosyalarını listeler.
 
-## Updating
+## Güncelleme
 
 ```bash
 git pull
@@ -106,6 +108,8 @@ pip install -r backend/requirements.txt
 npm run version:check
 ```
 
-## Troubleshooting
+## Sorun Giderme
 
-See `FAQ.md` and `README.md#Troubleshooting`.
+`FAQ.md` ve `README.md#Sorun-Giderme` bölümlerine bak.
+
+> **Dil:** [🇹🇷 Türkçe](INSTALL.md) | [🇬🇧 English](INSTALL.en.md) — İlk kurulumda Ayarlar → Dil üzerinden değiştirebilirsin.
