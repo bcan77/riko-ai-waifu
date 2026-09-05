@@ -1,0 +1,21 @@
+{
+  "name": "anime-waifu-project-v7",
+  "private": true,
+  "type": "module",
+  "workspaces": ["waifu-viewer", "packages/*", "apps/*"],
+  "scripts": {
+    "dev": "npm --prefix waifu-viewer run dev",
+    "build": "npm --prefix waifu-viewer run build",
+    "preview": "npm --prefix waifu-viewer run preview",
+    "desktop:dev": "npm --prefix apps/desktop run dev",
+    "desktop:build": "npm --prefix apps/desktop run build",
+    "wpkg:pack": "node scripts/pack-wpkg.mjs",
+    "convert": "node scripts/convert-to-wpkg.mjs",
+    "version": "node scripts/version.mjs",
+    "version:bump": "node scripts/version.mjs bump",
+    "version:sync": "node scripts/version.mjs sync",
+    "version:check": "node scripts/version.mjs --write && echo \"--- /api/version should match version.json ---\" && cat version.json",
+    "watch:build": "node scripts/watch-rebuild.mjs",
+    "dev:watch": "node scripts/watch-rebuild.mjs & npm run dev"
+  }
+}

@@ -1,0 +1,19 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+websockets>=12
+pydantic>=2.6
+pydantic-settings>=2.1
+python-multipart>=0.0.9
+httpx>=0.27
+openai>=1.30
+groq>=0.4
+numpy>=1.26
+psutil>=5.9
+# optional - installed if available, gracefully degraded otherwise
+# kokoro-onnx
+# elevenlabs
+# phonemizer
+# faster-whisper (small, 244MB best accuracy)
+# chromadb
+# sentence-transformers
+# onnxruntime (vad)

@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark" />
+    <title>MikuMiku Viewer — ZZZ</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400&display=swap" rel="stylesheet">
+    <script src="/ammo/ammo.wasm.js"></script>
+  </head>
+  <body>
+    <canvas id="canvas"></canvas>
+
+    <header class="topbar">
+      <div class="logo">
+        <button id="btnPanel" class="btn ghost small" style="padding:4px 8px" title="Menu (P)">☰</button>
+        <span class="logo-mark">◉</span>
+        <span class="logo-text">MMD<span>VIEWER</span></span>
+        <span class="logo-sub">ZZZ • Physics • VMD</span>
+      </div>
+      <div class="topbar-right">
+        <button id="btnSettings" class="btn ghost small" title="Settings (Ctrl+,)">⚙</button>
+        <span id="appVersion" class="fps" style="opacity:0.6;font-size:10px;letter-spacing:0.06em" title="App version">v—</span>
+        <span id="fps" class="fps">— fps</span>
+        <span id="status" class="status">Booting…</span>
+      </div>
+    </header>
+
+    <!-- Main Menu — before character screen -->
+    <div id="mainMenu" class="main-menu">
+      <div class="main-menu-card">
+        <div class="main-menu-kicker">WAIFU MMD • ZZZ</div>
+        <div class="main-menu-title">MikuMiku <span>Viewer</span></div>
+        <p class="main-menu-sub">Enter the stage, pick a character, and chat. Drop <code>.vmd</code> into <code>VMD_Animations/</code> and images into <code>backgrounds/</code> — both update live.</p>
+        <div class="main-menu-actions">
+          <button id="btnMenuEnter" class="btn primary">▶ Enter Stage</button>
+          <button id="btnMenuSetup" class="btn">✨ Setup</button>
+          <button id="btnMenuBackgrounds" class="btn ghost">🖼 Backgrounds</button>
+          <button id="btnMenuSettings" class="btn ghost">⚙ Settings</button>
+        </div>
+        <div class="main-menu-row" style="margin-top:10px">
+          <span id="menuHint" style="font-size:11px;color:var(--muted);line-height:1.5"></span>
+        </div>
+        <div class="main-menu-foot">
+          <span>Tip: <b>,</b> opens Settings • <b>P</b> toggles panel</span>
+          <a href="#" id="btnMenuSkip">Skip →</a>
+        </div>
+      </div>
+    </div>
+
+    <div id="scrim" class="scrim"></div>
+    <aside class="panel collapsed">
+      <nav class="panel-nav" aria-label="Panel sections">
+        <button data-panel-tab="characters" class="active">Characters</button>
+        <button data-panel-tab="motion">Motion</button>
+        <button data-panel-tab="scene">Scene</button>
+      </nav>
+
+      <div class="panel-section active" data-panel="characters">
+        <h3>MODEL</h3>
+        <div class="model-grid" id="modelGrid"></div>
+        <div class="row" style="margin-top:8px">
+          <button id="btnWpkg" class="btn">◨ .wpkg Editor</button>
+          <button id="btnWpkgReload" class="btn ghost">↺ Reload WPKGs</button>
+        </div>
+        <p class="hint">Characters are <code>.wpkg</code> bundles. Use the editor to import or create.</p>
+        <div style="margin-top:10px;padding:8px 10px;background:rgba(148,163,184,0.06);border:1px solid rgba(148,163,184,0.06);border-radius:10px;display:flex;align-items:center;gap:10px">
+          <span style="font-size:11px;color:var(--muted);font-weight:700">Affinity</span>
+          <span id="affinityVal" style="font-size:12px;font-weight:800">0.50</span>
+          <span id="affinityBar" style="flex:1;height:6px;background:rgba(148,163,184,0.12);border-radius:999px;overflow:hidden"><i style="display:block;height:100%;width:50%;background:#0ea5e9;border-radius:999px"></i></span>
+        </div>
+      </div>
+
+      <div class="panel-section" data-panel="motion">
+        <h3>VMD <span id="vmdCount" style="float:right;font-size:11px;color:var(--muted);font-weight:400;letter-spacing:0.04em">—</span></h3>
+        <div class="anim-list" id="animList"></div>
+        <div class="row" style="margin-top:8px">
+          <button id="btnPlay" class="btn primary">▶ Play</button>
+          <button id="btnPause" class="btn">⏸ Pause</button>
+          <button id="btnReset" class="btn ghost">↺ Reset</button>
+        </div>
+        <label class="slider-label">Speed <span id="speedVal">1.00×</span>
+          <input id="speed" type="range" min="0.1" max="2" step="0.05" value="1">
+        </label>
+        <label class="check"><input id="loopChk" type="checkbox" checked> Loop</label>
+        <label class="check"><input id="mirrorChk" type="checkbox"> Mirror</label>
+        <p class="hint" style="margin-top:8px">Live-synced with <code>VMD_Animations/</code>. Drag & drop a <code>.vmd</code> also works.</p>
+
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(148,163,184,0.07)">
+          <h3 style="margin-bottom:8px">PHYSICS & IK</h3>
+          <label class="check"><input id="physicsChk" type="checkbox" checked> Physics (hair / chest / skirt)</label>
+          <label class="check"><input id="ikChk" type="checkbox" checked> IK (feet / hands)</label>
+          <label class="slider-label">Gravity <span id="gravVal">-18</span>
+            <input id="gravity" type="range" min="-40" max="0" step="0.5" value="-18">
+          </label>
+          <label class="check"><input id="autoRotateChk" type="checkbox"> Auto orbit</label>
+        </div>
+      </div>
+
+      <div class="panel-section" data-panel="scene">
+        <h3>BACKGROUND</h3>
+        <div id="bgGrid" class="bg-grid"></div>
+        <p class="hint">Drop images into <code>backgrounds/</code> — live updates like VMD. Supports jpg/png/webp and .fbx/.glb 3D rooms.</p>
+
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(148,163,184,0.07)">
+          <h3>LIGHTING</h3>
+          <label class="slider-label">Key intensity <span id="keyVal">2.8</span>
+            <input id="keyIntensity" type="range" min="0" max="5" step="0.1" value="2.8">
+          </label>
+          <label class="slider-label">Fill <span id="fillVal">0.6</span>
+            <input id="fillIntensity" type="range" min="0" max="2" step="0.05" value="0.6">
+          </label>
+          <label class="slider-label">Rim <span id="rimVal">1.2</span>
+            <input id="rimIntensity" type="range" min="0" max="3" step="0.1" value="1.2">
+          </label>
+          <label class="slider-label">Exposure <span id="expVal">1.0</span>
+            <input id="exposure" type="range" min="0.3" max="2" step="0.05" value="1.0">
+          </label>
+          <label class="check"><input id="shadowChk" type="checkbox" checked> Shadows</label>
+          <label class="check"><input id="groundChk" type="checkbox" checked> Ground</label>
+        </div>
+
+        <div style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(148,163,184,0.07)">
+          <h3>CAMERA</h3>
+          <div class="row">
+            <button class="btn small" data-cam="front">Front</button>
+            <button class="btn small" data-cam="side">Side</button>
+            <button class="btn small" data-cam="back">Back</button>
+            <button class="btn small" data-cam="top">Top</button>
+          </div>
+        </div>
+        <div class="row" style="margin-top:8px"><button id="btnBgDebug" class="btn small ghost" style="flex:1">🛠 Debug (full)</button></div>
+      </div>
+
+      <footer class="panel-foot">
+        <span>Drag to orbit • Scroll to zoom • Right-drag to pan</span><br>
+        <span class="muted">Three.js 0.160 + MMDLoader + Bullet • Tone: ACESFilmic</span>
+      </footer>
+    </aside>
+
+    <div id="bgDebug" class="bg-debug hidden"></div>
+    <div id="loader" class="loader hidden">
+      <div class="loader-card">
+        <div class="loader-head">
+          <div class="loader-title" id="loaderTitle">Loading…</div>
+          <div class="loader-pct" id="loaderPct">0%</div>
+        </div>
+        <div class="loader-bar"><div id="loaderBar" class="loader-fill"></div><div class="loader-shimmer"></div></div>
+        <div class="loader-bar small"><div id="loaderSubBar" class="loader-fill sub"></div></div>
+        <div class="loader-steps">
+          <span class="step active">● Bullet</span><span class="step">● Model</span><span class="step">● Physics</span><span class="step">● VMD</span><span class="step">● Ready</span>
+        </div>
+        <div class="loader-sub" id="loaderSub">0%</div>
+        <div class="loader-tip">Drag to orbit • /dance • head-pat for affinity</div>
+      </div>
+    </div>
+
+    <div id="toast" class="toast"></div>
+
+    <!-- Chat bar: backend bridge -->
+    <div id="chatBar" class="chat-bar">
+      <div id="chatLog" class="chat-log" aria-live="polite"></div>
+      <div class="chat-input-row">
+        <button id="btnMic" class="btn ghost" title="Hold to talk / click to toggle STT">🎙</button>
+        <input id="chatInput" type="text" placeholder="Say something to her… (Enter to send, mic = barge-in)" autocomplete="off" />
+        <button id="btnSend" class="btn primary">➤</button>
+        <button id="btnStop" class="btn ghost" title="Stop talking">⏹</button>
+        <label class="check" style="margin:0 0 0 4px;font-size:11px"><input id="premiumChk" type="checkbox"> Premium</label>
+      </div>
+      <div class="chat-hint">WS: <span id="wsState">connecting…</span> • Model: <span id="chatModel">ellen</span> • Mic cuts TTS (barge-in)</div>
+    </div>
+
+    <div id="settingsRoot" class="settings-root hidden"></div>
+    <div id="setupWizardRoot" class="settings-root hidden"></div>
+    <!-- Gacha-style always-visible build badge -->
+    <div id="buildBadge" class="build-badge" title="Build info">v—</div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

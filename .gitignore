@@ -1,0 +1,31 @@
+# Secrets
+backend/.env
+backend/user_keys.json
+backend/user_settings.json
+
+# Deps / build
+node_modules/
+waifu-viewer/dist/
+apps/desktop/dist/
+apps/desktop/node_modules/
+packages/wpkg/node_modules/
+backend/.venv/
+backend/memory/chroma/
+backend/__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.log
+npm-debug.log*
+
+# Large sources (regenerate via npm run convert from MMD_Models_MiHoyo)
+# Uncomment if you want to keep repo lean and use Git LFS for characters
+# characters/*.wpkg
+# waifu-viewer/public/models/
+# backgrounds/
