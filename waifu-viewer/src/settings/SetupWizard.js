@@ -1,32 +1,100 @@
 /**
- * SetupWizard — first-boot onboarding. Covers language + API keys + character + quick prefs.
- * Shows when store.onboarded === false. Persists onboarded flag on finish/skip.
- * Bilingual EN/TR via waifu-viewer/src/i18n.js
+ * SetupWizard — macOS-style first-boot onboarding
+ * Steps: 1 Language (EN/TR) • 2 API Keys • 3 Character chooser • Done
+ * Blue, translucent, sleek SF-like icons, full-screen.
  */
 import { get, set, setOnboarded } from './store.js'
-import { dict } from '../i18n.js'
+
+const I18N = {
+  en: {
+    welcome: 'Welcome',
+    subtitle: 'Set up your Waifu MMD in 3 quick steps',
+    stepLang: 'Language',
+    stepKeys: 'API Keys',
+    stepChar: 'Character',
+    langTitle: 'Choose your language',
+    langDesc: 'You can change this anytime in Settings',
+    langEn: 'English',
+    langTr: 'Türkçe',
+    keysTitle: 'Connect your AI',
+    keysDesc: 'Paste keys from your providers. Everything stays <b>local</b> — no cloud. Skip to use offline mock.',
+    keysOpenRouter: 'OpenRouter <span style="opacity:.6;font-weight:400">— primary LLM</span>',
+    keysOpenRouterPh: 'sk-or-v1-…',
+    keysModel: 'Model',
+    keysGroq: 'Groq <span style="opacity:.6;font-weight:400">— fallback LLM</span>',
+    keysEleven: 'ElevenLabs <span style="opacity:.6;font-weight:400">— premium voice</span>',
+    keysFish: 'Fish Audio <span style="opacity:.6;font-weight:400">— alternative voice</span>',
+    keysHint: 'Keys are saved to <code>localStorage</code> + <code>POST /api/keys</code>. Leave blank for mock.',
+    keysFree: 'Free models end with <code>:free</code>. Browse at',
+    charTitle: 'Choose your companion',
+    charDesc: 'You can switch anytime. Outfit is remembered per character.',
+    voiceEn: 'English voice',
+    voiceJa: 'Japanese voice',
+    premium: 'Premium TTS',
+    doneTitle: "You're all set",
+    doneDesc: 'Keys (if any) are saved locally. Hit <b>Start</b> to enter — reopen setup via <b>⚙ Settings → Re-run setup</b> or <b>,</b>.',
+    health: 'Backend',
+    back: 'Back',
+    next: 'Continue',
+    finish: 'Start ♡',
+    skip: 'Skip for now',
+    checking: 'checking…',
+  },
+  tr: {
+    welcome: 'Hoş geldin',
+    subtitle: 'Waifu MMD’yi 3 adımda kur',
+    stepLang: 'Dil',
+    stepKeys: 'API Anahtarları',
+    stepChar: 'Karakter',
+    langTitle: 'Dilini seç',
+    langDesc: 'Bunu daha sonra Ayarlar’dan değiştirebilirsin',
+    langEn: 'English',
+    langTr: 'Türkçe',
+    keysTitle: 'Yapay zekâyı bağla',
+    keysDesc: 'Anahtarlarını yapıştır. Her şey <b>yerel</b> kalır — bulut yok. Atla ve çevrimdışı mock ile devam et.',
+    keysOpenRouter: 'OpenRouter <span style="opacity:.6;font-weight:400">— ana LLM</span>',
+    keysOpenRouterPh: 'sk-or-v1-…',
+    keysModel: 'Model',
+    keysGroq: 'Groq <span style="opacity:.6;font-weight:400">— yedek LLM</span>',
+    keysEleven: 'ElevenLabs <span style="opacity:.6;font-weight:400">— premium ses</span>',
+    keysFish: 'Fish Audio <span style="opacity:.6;font-weight:400">— alternatif ses</span>',
+    keysHint: 'Anahtarlar <code>localStorage</code> + <code>POST /api/keys</code> ile saklanır. Mock için boş bırak.',
+    keysFree: 'Ücretsiz modeller <code>:free</code> ile biter. Göz at:',
+    charTitle: 'Yoldaşını seç',
+    charDesc: 'İstediğin zaman değiştirebilirsin. Kıyafet karakter bazında hatırlanır.',
+    voiceEn: 'İngilizce ses',
+    voiceJa: 'Japonca ses',
+    premium: 'Premium TTS',
+    doneTitle: 'Her şey hazır',
+    doneDesc: 'Anahtarlar (varsa) yerel olarak kaydedildi. <b>Başlat</b> ile gir — kurulumu <b>⚙ Ayarlar → Kurulumu tekrarla</b> veya <b>,</b> ile yeniden açabilirsin.',
+    health: 'Backend',
+    back: 'Geri',
+    next: 'Devam',
+    finish: 'Başlat ♡',
+    skip: 'Şimdilik atla',
+    checking: 'kontrol ediliyor…',
+  }
+}
 
 const WIZ_FREE_MODELS = [
   { id:'google/gemini-2.0-flash-001', label:'Gemini 2.0 Flash (default · not free)' },
-  { id:'poolside/laguna-xs-2.1:free', label:'Laguna XS 2.1 — free · 33B code · 262k' },
-  { id:'poolside/laguna-s-2.1:free', label:'Laguna S 2.1 — free · 118B code · 262k' },
-  { id:'thinkingmachines/inkling:free', label:'Inkling — free · 1M ctx · multimodal' },
-  { id:'thinkingmachines/inkling-small:free', label:'Inkling Small — free · 1M ctx · fast' },
-  { id:'nvidia/nemotron-3.5-lightning:free', label:'Nemotron 3.5 Lightning — free · 1M ctx · fast' },
-  { id:'nvidia/nemotron-3-super-120b-a12b:free', label:'Nemotron 3 Super 120B — free · hybrid MoE' },
-  { id:'nvidia/nemotron-3-ultra-550b-a55b:free', label:'Nemotron 3 Ultra 550B — free · frontier 1M' },
-  { id:'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free', label:'Nemotron 3 Nano Omni 30B — free · reasoning' },
+  { id:'poolside/laguna-xs-2.1:free', label:'Laguna XS 2.1 — free · 33B · 262k' },
+  { id:'poolside/laguna-s-2.1:free', label:'Laguna S 2.1 — free · 118B · 262k' },
+  { id:'thinkingmachines/inkling:free', label:'Inkling — free · 1M · multimodal' },
+  { id:'thinkingmachines/inkling-small:free', label:'Inkling Small — free · fast' },
+  { id:'nvidia/nemotron-3.5-lightning:free', label:'Nemotron Lightning — free · fast' },
+  { id:'nvidia/nemotron-3-super-120b-a12b:free', label:'Nemotron Super 120B — free · MoE' },
   { id:'google/gemma-4-31b-it:free', label:'Gemma 4 31B — free · 262k' },
-  { id:'google/gemma-4-26b-a4b-it:free', label:'Gemma 4 26B A4B — free · MoE 262k' },
-  { id:'minimax/minimax-m3:free', label:'MiniMax M3 — free · multimodal 1M' },
-  { id:'minimax/minimax-m2.7:free', label:'MiniMax M2.7 — free · 197k' },
-  { id:'z-ai/glm-5.2:free', label:'GLM 5.2 — free · reasoning 256k' },
-  { id:'cohere/north-mini-code:free', label:'North Mini Code — free · Cohere coding 256k' },
-  { id:'liquid/lfm-2.5-2.6b:free', label:'LFM 2.5 2.6B — free · compact reasoning' },
-  { id:'dots-studio/dots-3-note-preview:free', label:'Dots 3 Note Preview — free · 512k MoE' },
-  { id:'inclusionai/ling-3.0-flash-fin:free', label:'Ling 3.0 Flash Fin — free · finance 262k' },
-  { id:'nvidia/nemotron-3.5-content-safety:free', label:'Nemotron 3.5 Content Safety — free · guardrail' },
+  { id:'google/gemma-4-26b-a4b-it:free', label:'Gemma 4 26B A4B — free · MoE' },
+  { id:'z-ai/glm-5.2:free', label:'GLM 5.2 — free · 256k' },
 ]
+
+function t(key){
+  try{
+    const lang = get().language || 'en'
+    return (I18N[lang] && I18N[lang][key]) || I18N.en[key] || key
+  }catch{ return I18N.en[key] || key }
+}
 
 export function mountSetupWizard(opts={}){
   const containerId = opts.containerId || 'setupWizardRoot'
@@ -36,15 +104,13 @@ export function mountSetupWizard(opts={}){
   if(!root){
     root = document.createElement('div')
     root.id = containerId
-    root.className = 'settings-root hidden'
-    root.style.zIndex = '41'
+    root.className = 'setup-root hidden'
     document.body.appendChild(root)
   }
-  let step = 0 // 0: welcome, 1: keys, 2: character/voice, 3: graphics/done
+  let step = 0 // 0 lang, 1 keys, 2 char, 3 done
+  const STEPS = ['lang','keys','char','done']
 
-  function shouldShow(){
-    try { return !get().onboarded } catch { return true }
-  }
+  function shouldShow(){ try{ return !get().onboarded }catch{ return true } }
 
   async function saveKeysToBackend(){
     const s=get()
@@ -58,131 +124,209 @@ export function mountSetupWizard(opts={}){
     try{ await fetch('/api/keys',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)}) }catch{}
   }
 
-  function t(key){
-    const loc = (get().locale === 'en' ? 'en' : 'tr')
-    return (dict[loc] && dict[loc][key]) ?? dict.en[key] ?? key
-  }
-  function STEPS(){
-    const loc = (get().locale === 'en' ? 'en' : 'tr')
-    return dict[loc].wiz_steps
-  }
-
-  function langPickerHtml(){
-    const cur = get().locale || 'tr'
-    return `
-      <div style="display:flex;flex-direction:column;align-items:center;gap:6px;margin:14px 0 6px">
-        <div style="font-size:11px;font-weight:700;letter-spacing:0.06em;text-transform:uppercase;color:var(--muted)">${t('wiz_language')}</div>
-        <div style="display:flex;gap:8px">
-          <button data-lang="tr" class="btn small ${cur==='tr'?'primary':''}" style="min-width:110px">🇹🇷 Türkçe</button>
-          <button data-lang="en" class="btn small ${cur==='en'?'primary':''}" style="min-width:110px">🇬🇧 English</button>
-        </div>
-        <div class="settings-hint" style="margin:0;text-align:center">${t('wiz_language_hint')}</div>
-      </div>
-    `
-  }
-
   function render(){
     const s=get()
     const models=getModels()
-    const steps = STEPS()
+    const curLang = s.language || 'en'
+    const tr = (k)=> {
+      const lang = curLang
+      return (I18N[lang] && I18N[lang][k]) || I18N.en[k] || k
+    }
+    // macOS left sidebar icons (SF-like, sleek, blue)
+    const icons = [
+      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20z"/><path d="M12 2c2.5 2.8 3.9 6.2 3.9 10s-1.4 7.2-3.9 10c-2.5-2.8-3.9-6.2-3.9-10S9.5 4.8 12 2z"/></svg>`,
+      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1 0 7.78a5.5 5.5 0 0 1 0-7.78z"/><path d="M14 7l-3 3"/><path d="M5 21l4-4"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>`,
+      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M12 11l2 2l4-4" stroke-width="1.4"/></svg>`,
+      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/><circle cx="12" cy="12" r="10" stroke-width="1.4" opacity=".35"/></svg>`,
+    ]
+    const labels = [tr('stepLang'), tr('stepKeys'), tr('stepChar'), '✓']
     root.innerHTML = `
-      <div class="settings-backdrop"></div>
-      <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Setup">
-        <div class="settings-head">
-          <h2>✨ ${t('wiz_first_setup')} — ${steps[step]}</h2>
-          <div class="settings-head-actions">
-            <span style="font-size:11px;color:var(--muted)">${t('wiz_step')} ${step+1} / ${steps.length}</span>
-            <button class="btn ghost small" data-act="skip">${t('wiz_skip')}</button>
+      <div class="setup-backdrop"></div>
+      <div class="setup-card" role="dialog" aria-modal="true">
+        <!-- top bar like macOS traffic lights -->
+        <div class="setup-topbar">
+          <div class="setup-traffic">
+            <span class="dot red"></span><span class="dot yellow"></span><span class="dot green"></span>
           </div>
+          <div class="setup-titlebar">
+            <span class="setup-title">${tr('welcome')}</span>
+            <span class="setup-subtitle">${tr('subtitle')}</span>
+          </div>
+          <button class="setup-skip" data-act="skip">${tr('skip')}</button>
         </div>
-        <div style="display:flex;gap:6px;padding:10px 16px 0">
-          ${steps.map((label,i)=>`<span style="flex:1;height:4px;border-radius:999px;background:${i<=step?'var(--accent)':'rgba(255,255,255,0.12)'}"></span>`).join('')}
-        </div>
-        <div class="settings-body">
-          ${step===0 ? `
-            <div class="settings-card" style="text-align:center;padding:20px">
-              <div style="font-size:28px">◉</div>
-              <h3 style="justify-content:center">${t('wiz_welcome_title')}</h3>
-              <p style="color:var(--muted);line-height:1.6;font-size:13px">${t('wiz_welcome_body')}</p>
-              <div class="settings-hint">${t('wiz_welcome_hint')}</div>
-            </div>
-            ${langPickerHtml()}
-          `:''}
-          ${step===1 ? `
-            <h3>${t('wiz_api_title')}</h3>
-            <div class="settings-card">
-              <div class="settings-hint" style="margin:0 0 10px">${t('wiz_api_hint')}</div>
-              <div class="settings-row"><label>${t('wiz_api_openrouter')}
-                <input type="password" data-wiz="openrouterApiKey" placeholder="sk-or-v1-..." value="${s.openrouterApiKey||''}">
-              </label></div>
-              <div class="settings-row"><label>${t('wiz_api_model')} <span style="font-size:10px;color:var(--muted)">free models — pick or type custom</span>
-                <input list="wiz-or-models" data-wiz="openrouterModel" placeholder="google/gemini-2.0-flash-001" value="${(s.openrouterModel||'').replace(/"/g,'&quot;')}" style="font-family:JetBrains Mono,monospace;font-size:12px">
-                <datalist id="wiz-or-models">${WIZ_FREE_MODELS.map(m=>`<option value="${m.id}">${m.label}</option>`).join('')}</datalist>
-              </label>
-                <div class="settings-hint" style="margin:4px 0 0">${t('wiz_api_model_hint')} <a href="https://openrouter.ai/models?max_price=0" target="_blank" style="color:var(--accent-2)">openrouter.ai/models?max_price=0</a></div>
+        <div class="setup-body">
+          <aside class="setup-sidebar">
+            ${STEPS.map((id,i)=>`
+              <div class="setup-step ${i===step?'active':''} ${i<step?'done':''}" data-step="${i}">
+                <div class="setup-step-icon ${i===step?'active':''}">${icons[i]}</div>
+                <div class="setup-step-meta">
+                  <b>${labels[i]}</b>
+                  <span>${i<step?'✓ Completed': i===step?'In progress':'Pending'}</span>
+                </div>
+                ${i<step?`<span class="setup-check">✓</span>`:''}
               </div>
-              <div class="settings-row"><label>${t('wiz_api_groq')}
-                <input type="password" data-wiz="groqApiKey" placeholder="gsk_..." value="${s.groqApiKey||''}">
-              </label></div>
-              <div class="settings-row"><label>${t('wiz_api_eleven')}
-                <input type="password" data-wiz="elevenlabsApiKey" placeholder="elevenlabs key..." value="${s.elevenlabsApiKey||''}">
-              </label></div>
-              <div class="settings-row"><label>${t('wiz_api_fish')}
-                <input type="password" data-wiz="fishApiKey" placeholder="fish key..." value="${s.fishApiKey||''}">
-              </label></div>
-              <div class="settings-hint">${t('wiz_api_saved_hint')}</div>
-            </div>
-          `:''}
-          ${step===2 ? `
-            <h3>${t('wiz_char_title')}</h3>
-            <div class="settings-model-grid" style="margin-bottom:12px">
-              ${models.map(m=>`<button class="model-card ${m.id===s.modelId?'active':''}" data-wiz-model="${m.id}"><div class="avatar">${m.avatar||''}</div><div class="meta"><b>${m.name}</b><span>${m.desc||''}</span></div></button>`).join('')}
-            </div>
-            <div class="settings-grid">
-              <div class="settings-card">
-                <h4>${t('wiz_char_voice')}</h4>
-                <div class="settings-row"><label>${t('wiz_char_en_voice')}
-                  <select data-wiz="ttsVoiceEn">
-                    <option value="af_sky" ${s.ttsVoiceEn==='af_sky'?'selected':''}>af_sky</option>
-                    <option value="af_bella" ${s.ttsVoiceEn==='af_bella'?'selected':''}>af_bella</option>
-                    <option value="af_nicole" ${s.ttsVoiceEn==='af_nicole'?'selected':''}>af_nicole</option>
-                    <option value="af_sarah" ${s.ttsVoiceEn==='af_sarah'?'selected':''}>af_sarah</option>
-                  </select></label></div>
-                <div class="settings-row"><label>${t('wiz_char_ja_voice')}
-                  <select data-wiz="ttsVoiceJa">
-                    <option value="jf_alpha" ${s.ttsVoiceJa==='jf_alpha'?'selected':''}>jf_alpha</option>
-                    <option value="jf_gongitsune" ${s.ttsVoiceJa==='jf_gongitsune'?'selected':''}>jf_gongitsune</option>
-                    <option value="jf_sakura" ${s.ttsVoiceJa==='jf_sakura'?'selected':''}>jf_sakura</option>
-                    <option value="jf_nezumi" ${s.ttsVoiceJa==='jf_nezumi'?'selected':''}>jf_nezumi</option>
-                  </select></label></div>
-                <label class="check"><input type="checkbox" data-wiz="premium" ${s.premium?'checked':''}> ${t('wiz_char_premium')}</label>
-              </div>
-              <div class="settings-card">
-                <h4>${t('wiz_char_prefs')}</h4>
-                <label class="check"><input type="checkbox" data-wiz="shadows" ${s.shadows?'checked':''}> ${t('wiz_char_shadows')}</label>
-                <label class="check"><input type="checkbox" data-wiz="eyeTracking" ${s.eyeTracking?'checked':''}> ${t('wiz_char_eye')}</label>
-                <div class="settings-row"><label>${t('wiz_char_dpr')}
-                  <select data-wiz="dprCap">
-                    <option value="auto" ${s.dprCap==='auto'?'selected':''}>Auto</option>
-                    <option value="1.5" ${s.dprCap==='1.5'?'selected':''}>1.5</option>
-                    <option value="2" ${s.dprCap==='2'?'selected':''}>2</option>
-                  </select></label></div>
+            `).join('')}
+            <div class="setup-sidebar-foot">
+              <div class="setup-progress">
+                <div class="setup-progress-bar"><i style="width:${((step+1)/STEPS.length*100).toFixed(0)}%"></i></div>
+                <span>Step ${step+1} of ${STEPS.length}</span>
               </div>
             </div>
-          `:''}
-          ${step===3 ? `
-            <div class="settings-card" style="text-align:center;padding:20px">
-              <div style="font-size:24px">♡</div>
-              <h3 style="justify-content:center">${t('wiz_ready_title')}</h3>
-              <p style="color:var(--muted);line-height:1.6;font-size:13px">${t('wiz_ready_body')}</p>
-              <div class="settings-hint" style="text-align:left">${t('wiz_ready_health')} <span id="wizHealth">${t('wiz_health_checking')}</span></div>
-            </div>
-          `:''}
+          </aside>
+          <main class="setup-main">
+            ${step===0 ? `
+              <div class="setup-pane">
+                <div class="setup-pane-head">
+                  <div class="setup-icon-wrap blue"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.7"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20z"/></svg></div>
+                  <h2>${tr('langTitle')}</h2>
+                  <p>${tr('langDesc')}</p>
+                </div>
+                <div class="setup-lang-grid">
+                  <button class="setup-lang-card ${curLang==='en'?'active':''}" data-lang="en">
+                    <div class="lang-flag">🇺🇸</div>
+                    <div class="lang-meta"><b>${tr('langEn')}</b><span>English · Default</span></div>
+                    <div class="lang-check">${curLang==='en'?'✓':''}</div>
+                  </button>
+                  <button class="setup-lang-card ${curLang==='tr'?'active':''}" data-lang="tr">
+                    <div class="lang-flag">🇹🇷</div>
+                    <div class="lang-meta"><b>${tr('langTr')}</b><span>Türkçe</span></div>
+                    <div class="lang-check">${curLang==='tr'?'✓':''}</div>
+                  </button>
+                </div>
+                <div class="setup-hint">Selected: <b>${curLang==='tr'?'Türkçe':'English'}</b> — the UI will use this language after setup.</div>
+              </div>
+            `:''}
+            ${step===1 ? `
+              <div class="setup-pane">
+                <div class="setup-pane-head">
+                  <div class="setup-icon-wrap blue"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.7"><path d="M21 2l-2 2"/><path d="M7.5 10.5a5.5 5.5 0 1 0 7.78 0a5.5 5.5 0 0 0-7.78 0z"/><path d="M14 7l-3 3"/><path d="M5 21l4-4"/></svg></div>
+                  <h2>${tr('keysTitle')}</h2>
+                  <p>${tr('keysDesc')}</p>
+                </div>
+                <div class="setup-keys">
+                  <label class="setup-field">
+                    <span class="setup-field-label">${tr('keysOpenRouter')}</span>
+                    <div class="setup-input-wrap">
+                      <input type="password" data-wiz="openrouterApiKey" placeholder="${tr('keysOpenRouterPh')}" value="${(s.openrouterApiKey||'').replace(/"/g,'&quot;')}" autocomplete="off" spellcheck="false">
+                      <button type="button" class="setup-eye" data-eye="openrouterApiKey">👁</button>
+                    </div>
+                  </label>
+                  <label class="setup-field">
+                    <span class="setup-field-label">${tr('keysModel')}</span>
+                    <input list="wiz-or-models" data-wiz="openrouterModel" placeholder="google/gemini-2.0-flash-001" value="${(s.openrouterModel||'').replace(/"/g,'&quot;')}" style="font-family:JetBrains Mono,monospace;font-size:12px">
+                    <datalist id="wiz-or-models">${WIZ_FREE_MODELS.map(m=>`<option value="${m.id}"></option>`).join('')}</datalist>
+                    <span class="setup-field-hint">${tr('keysFree')} <a href="https://openrouter.ai/models?max_price=0" target="_blank">openrouter.ai</a></span>
+                  </label>
+                  <div class="setup-keys-grid">
+                    <label class="setup-field">
+                      <span class="setup-field-label">${tr('keysGroq')}</span>
+                      <div class="setup-input-wrap">
+                        <input type="password" data-wiz="groqApiKey" placeholder="gsk_…" value="${(s.groqApiKey||'').replace(/"/g,'&quot;')}">
+                        <button type="button" class="setup-eye" data-eye="groqApiKey">👁</button>
+                      </div>
+                    </label>
+                    <label class="setup-field">
+                      <span class="setup-field-label">${tr('keysEleven')}</span>
+                      <div class="setup-input-wrap">
+                        <input type="password" data-wiz="elevenlabsApiKey" placeholder="xi-…" value="${(s.elevenlabsApiKey||'').replace(/"/g,'&quot;')}">
+                        <button type="button" class="setup-eye" data-eye="elevenlabsApiKey">👁</button>
+                      </div>
+                    </label>
+                  </div>
+                  <label class="setup-field">
+                    <span class="setup-field-label">${tr('keysFish')}</span>
+                    <div class="setup-input-wrap">
+                      <input type="password" data-wiz="fishApiKey" placeholder="fish…" value="${(s.fishApiKey||'').replace(/"/g,'&quot;')}">
+                      <button type="button" class="setup-eye" data-eye="fishApiKey">👁</button>
+                    </div>
+                  </label>
+                  <div class="setup-hint">${tr('keysHint')}</div>
+                </div>
+              </div>
+            `:''}
+            ${step===2 ? `
+              <div class="setup-pane">
+                <div class="setup-pane-head">
+                  <div class="setup-icon-wrap blue"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.7"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11l-2 2l-4-4"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></div>
+                  <h2>${tr('charTitle')}</h2>
+                  <p>${tr('charDesc')}</p>
+                </div>
+                <div class="setup-char-grid">
+                  ${models.map(m=>{
+                    const isActive = m.id===s.modelId
+                    const outfits = m.outfits || [{id:'default', name:'Default'}]
+                    return `
+                      <button class="setup-char-card ${isActive?'active':''}" data-wiz-model="${m.id}">
+                        <div class="setup-char-avatar">${m.avatar||m.name[0]}</div>
+                        <div class="setup-char-meta">
+                          <b>${m.name}</b>
+                          <span>${m.desc||''}</span>
+                          <small>${outfits.length>1 ? outfits.map(o=>o.name).join(' • ') : m.jp||''}</small>
+                        </div>
+                        <div class="setup-char-check">${isActive?'✓':''}</div>
+                      </button>
+                    `
+                  }).join('')}
+                </div>
+                ${(()=>{
+                  const curM = models.find(m=>m.id===s.modelId)
+                  const outfits = curM?.outfits || []
+                  if(outfits.length<=1) return ''
+                  const curOut = s.outfitId || 'default'
+                  return `
+                    <div class="setup-outfit-row">
+                      <span class="setup-field-label" style="margin-top:10px;display:block">Outfit</span>
+                      <div class="setup-outfit-grid">
+                        ${outfits.map(o=>`
+                          <button class="setup-outfit-btn ${o.id===curOut?'active':''}" data-wiz-outfit="${o.id}">${o.name}</button>
+                        `).join('')}
+                      </div>
+                    </div>
+                  `
+                })()}
+                <div class="setup-voice-row">
+                  <label class="setup-field small">
+                    <span class="setup-field-label">${tr('voiceEn')}</span>
+                    <select data-wiz="ttsVoiceEn">
+                      <option value="af_sky" ${s.ttsVoiceEn==='af_sky'?'selected':''}>af_sky — Ellen</option>
+                      <option value="af_bella" ${s.ttsVoiceEn==='af_bella'?'selected':''}>af_bella — Jane</option>
+                      <option value="af_nicole" ${s.ttsVoiceEn==='af_nicole'?'selected':''}>af_nicole — Zhu</option>
+                      <option value="af_sarah" ${s.ttsVoiceEn==='af_sarah'?'selected':''}>af_sarah</option>
+                    </select>
+                  </label>
+                  <label class="setup-field small">
+                    <span class="setup-field-label">${tr('voiceJa')}</span>
+                    <select data-wiz="ttsVoiceJa">
+                      <option value="jf_alpha" ${s.ttsVoiceJa==='jf_alpha'?'selected':''}>jf_alpha</option>
+                      <option value="jf_gongitsune" ${s.ttsVoiceJa==='jf_gongitsune'?'selected':''}>jf_gongitsune</option>
+                      <option value="jf_sakura" ${s.ttsVoiceJa==='jf_sakura'?'selected':''}>jf_sakura</option>
+                      <option value="jf_nezumi" ${s.ttsVoiceJa==='jf_nezumi'?'selected':''}>jf_nezumi</option>
+                    </select>
+                  </label>
+                  <label class="setup-check">
+                    <input type="checkbox" data-wiz="premium" ${s.premium?'checked':''}>
+                    <span>${tr('premium')}</span>
+                  </label>
+                </div>
+              </div>
+            `:''}
+            ${step===3 ? `
+              <div class="setup-pane center">
+                <div class="setup-icon-wrap blue large">♡</div>
+                <h2>${tr('doneTitle')}</h2>
+                <p>${tr('doneDesc')}</p>
+                <div class="setup-health">
+                  <span>${tr('health')}:</span>
+                  <span id="wizHealth">${tr('checking')}</span>
+                </div>
+              </div>
+            `:''}
+          </main>
         </div>
-        <div style="display:flex;gap:8px;justify-content:space-between;padding:12px 16px;border-top:1px solid rgba(255,255,255,0.06)">
-          <button class="btn ghost small" data-act="back" ${step===0?'disabled style="opacity:0.4"':''}>${t('wiz_back')}</button>
-          <div style="display:flex;gap:8px">
-            ${step<steps.length-1 ? `<button class="btn primary small" data-act="next">${t('wiz_next')}</button>` : `<button class="btn primary small" data-act="finish">${t('wiz_finish')}</button>`}
+        <div class="setup-footer">
+          <button class="btn ghost" data-act="back" ${step===0?'disabled':''}>‹ ${tr('back')}</button>
+          <div class="setup-footer-right">
+            ${step<3 ? `<button class="btn primary setup-next" data-act="next">${tr('next')} ›</button>` : `<button class="btn primary setup-next" data-act="finish">${tr('finish')}</button>`}
           </div>
         </div>
       </div>
@@ -191,13 +335,14 @@ export function mountSetupWizard(opts={}){
     if(step===3){
       fetch('/health').then(r=>r.json()).then(h=>{
         const el=document.getElementById('wizHealth')
-        if(el) el.textContent = h ? `ok • ${h.llm_provider}/${h.tts_provider} • keys o:${!!h.has_openrouter} g:${!!h.has_groq} e:${!!h.has_elevenlabs}` : t('wiz_health_unreachable')
+        if(el) el.textContent = h ? `ok • ${h.llm_provider}/${h.tts_provider} • o:${!!h.has_openrouter} g:${!!h.has_groq} e:${!!h.has_elevenlabs}` : 'unreachable'
       }).catch(()=>{
         const el=document.getElementById('wizHealth')
-        if(el) el.textContent=t('wiz_health_unreachable')
+        if(el) el.textContent='unreachable — check backend :8000'
       })
     }
   }
+
   function bind(){
     root.querySelector('[data-act="skip"]')?.addEventListener('click', ()=>{
       setOnboarded(true)
@@ -210,7 +355,7 @@ export function mountSetupWizard(opts={}){
     root.querySelector('[data-act="next"]')?.addEventListener('click', async ()=>{
       collectStep()
       if(step===1) await saveKeysToBackend()
-      if(step<STEPS().length-1){ step++; render() }
+      if(step<3){ step++; render() }
     })
     root.querySelector('[data-act="finish"]')?.addEventListener('click', async ()=>{
       collectStep()
@@ -221,8 +366,8 @@ export function mountSetupWizard(opts={}){
     })
     root.querySelectorAll('[data-lang]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        const v = btn.dataset.lang
-        if(v==='en' || v==='tr'){ set({ locale: v }); render() }
+        set({ language: btn.dataset.lang })
+        render()
       })
     })
     root.querySelectorAll('[data-wiz]').forEach(el=>{
@@ -234,15 +379,36 @@ export function mountSetupWizard(opts={}){
         set({ [field]: v })
       })
     })
-    root.querySelectorAll('[data-wiz-model]').forEach(btn=>{
+    root.querySelectorAll('[data-wiz-outfit]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        set({ modelId: btn.dataset.wizModel })
+        set({ outfitId: btn.dataset.wizOutfit })
         render()
       })
     })
-    root.querySelector('.settings-backdrop')?.addEventListener('click', ()=>{
+    root.querySelectorAll('[data-wiz-model]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        set({ modelId: btn.dataset.wizModel })
+        // reset outfit to default for new model
+        try{
+          const models = getModels()
+          const m = models.find(x=>x.id===btn.dataset.wizModel)
+          const outfits = m?.outfits || []
+          const cur = get().outfitId
+          if(!outfits.some(o=>o.id===cur)) set({ outfitId: outfits[0]?.id || 'default' })
+        }catch{}
+        render()
+      })
     })
+    root.querySelectorAll('[data-eye]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const f = btn.dataset.eye
+        const inp = root.querySelector(`[data-wiz="${f}"]`)
+        if(inp){ inp.type = inp.type==='password' ? 'text' : 'password'; btn.textContent = inp.type==='password' ? '👁' : '🙈' }
+      })
+    })
+    root.querySelector('.setup-backdrop')?.addEventListener('click', ()=>{})
   }
+
   function collectStep(){
     root.querySelectorAll('[data-wiz]').forEach(el=>{
       const field=el.dataset.wiz
@@ -251,6 +417,7 @@ export function mountSetupWizard(opts={}){
       set({ [field]: v })
     })
   }
+
   function open(){
     step=0
     render()
@@ -260,12 +427,12 @@ export function mountSetupWizard(opts={}){
   }
   function close(){
     root.classList.remove('open')
-    setTimeout(()=> root.classList.add('hidden'), 180)
+    setTimeout(()=> root.classList.add('hidden'), 200)
     document.removeEventListener('keydown', onKey)
   }
-  function onKey(e){ if(e.key==='Escape'){ } }
+  function onKey(e){ if(e.key==='Escape'){ /* block esc, use skip */ } }
   function isOpen(){ return !root.classList.contains('hidden') }
 
   root.classList.add('hidden')
-  return { open, close, isOpen, shouldShow, render }
+  return { open, close, isOpen, shouldShow, render, t }
 }

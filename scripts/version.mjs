@@ -124,6 +124,17 @@ export function sync() {
       }
     }
   }catch{}
+  // sync apps/desktop/package.json version field as well (electron-builder uses this)
+  try{
+    const deskPkg = path.join(ROOT,'apps/desktop/package.json')
+    if(fs.existsSync(deskPkg)){
+      const pkg = JSON.parse(fs.readFileSync(deskPkg,'utf8'))
+      if(pkg.version !== data.npmVersion){
+        pkg.version = data.npmVersion
+        fs.writeFileSync(deskPkg, JSON.stringify(pkg,null,2)+'\n')
+      }
+    }
+  }catch{}
   return data
 }
 

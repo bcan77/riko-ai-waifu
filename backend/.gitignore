@@ -1,6 +1,5 @@
 .env
 user_keys.json
-user_settings.json
 memory/chroma
 __pycache__/
 *.pyc

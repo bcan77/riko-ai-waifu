@@ -80,10 +80,24 @@ async def get_version_json_alias():
 
 @router.post("/api/version/rebuild")
 async def trigger_rebuild():
-    # trigger sync of version.json (bump buildTime) — actual vite build must be run externally
-    # we just touch version.json to mark checked; client can poll again
-    import subprocess, sys
+    # Regenerate version.json with fresh buildTime via canonical script, not just touch.
+    import subprocess, sys, pathlib, json as _json, time as _time
     try:
-        subprocess.Popen([sys.executable, "-c", "import pathlib; pathlib.Path('version.json').touch()"], cwd=str(ROOT))
-    except: pass
+        # Try canonical Node sync (produces 10-field JSON)
+        proc = subprocess.run(["node", "scripts/version.mjs", "sync"], cwd=str(ROOT), capture_output=True, timeout=10)
+        if proc.returncode != 0:
+            # fallback: bump buildTime in-place
+            if VERSION_JSON.exists():
+                try:
+                    j = _json.loads(VERSION_JSON.read_text())
+                    j["buildTime"] = _time.strftime("%Y-%m-%dT%H:%M:%S.000Z", _time.gmtime())
+                    VERSION_JSON.write_text(_json.dumps(j, indent=2) + "\n")
+                except:
+                    pathlib.Path(ROOT / "version.json").touch()
+            else:
+                pathlib.Path(ROOT / "version.json").touch()
+    except Exception:
+        try:
+            pathlib.Path(ROOT / "version.json").touch()
+        except: pass
     return {"ok": True, "version": _read_version(), "needsRebuild": _needs_rebuild()}

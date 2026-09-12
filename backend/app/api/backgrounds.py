@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 from pathlib import Path
+from urllib.parse import quote
 
 router = APIRouter()
 
@@ -52,7 +53,7 @@ def list_backgrounds():
         out.append({
             "id": bid,
             "name": name,
-            "file": f"/backgrounds/{info['file']}",
+            "file": "/backgrounds/" + "/".join(quote(p, safe="") for p in info['file'].split("/")),
             "type": "model",
             "ext": info["ext"],
             "modelFile": info["file"],
@@ -83,7 +84,7 @@ def list_backgrounds():
             out.append({
                 "id": rel,
                 "name": label,
-                "file": f"/backgrounds/{rel}",
+                "file": "/backgrounds/" + "/".join(quote(p, safe="") for p in rel.split("/")),
                 "type": "image",
                 "size": p.stat().st_size if p.exists() else 0,
             })

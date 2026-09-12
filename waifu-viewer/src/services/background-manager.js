@@ -4,6 +4,20 @@ import { FBXLoader } from 'three/addons/loaders/FBXLoader.js'
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js'
 import { OBJLoader } from 'three/addons/loaders/OBJLoader.js'
 
+// ── troubleshooting logger ──────────────────────────────────────────────
+const _t0 = Date.now();
+function _bgLog(level, ...args){
+  const ts = ((Date.now()-_t0)/1000).toFixed(3);
+  const msg = `[bg:${level} +${ts}s] ${args.map(a=> typeof a==='string'?a: (()=>{ try{ return JSON.stringify(a)}catch{ return String(a)}})()).join(' ')}`;
+  if(level==='ERROR') console.error(msg); else if(level==='WARN') console.warn(msg); else console.log(msg);
+  // also surface to window for Electron log forwarding
+  try{ window.__bgLogs = window.__bgLogs||[]; window.__bgLogs.push(msg); if(window.__bgLogs.length>300) window.__bgLogs.shift(); }catch{}
+}
+const bgInfo = (...a)=> _bgLog('INFO', ...a);
+const bgWarn = (...a)=> _bgLog('WARN', ...a);
+const bgErr  = (...a)=> _bgLog('ERROR', ...a);
+bgInfo('module loaded', `href=${location.href}`, `userAgent=${navigator.userAgent.slice(0,120)}`);
+
 let bgTexture = null
 let bgSphere = null
 let sceneRef = null
@@ -100,19 +114,27 @@ export function setBgDebugTransform(patch){
 }
 export function resetBgDebug(){ _bgDbg = { pos:{...DEFAULT_BG.pos}, rot:{...DEFAULT_BG.rot}, scale:DEFAULT_BG.scale, groupPos:{...DEFAULT_BG.groupPos}, groupRot:{...DEFAULT_BG.groupRot}, groupScale:DEFAULT_BG.groupScale }; _saveBgDbg(); _applyBgDbgLive() }
 const loadingManager = new THREE.LoadingManager()
+// global loading diagnostics
+loadingManager.onStart = (url, loaded, total) => bgInfo(`LoadingManager start ${url} ${loaded}/${total}`);
+loadingManager.onLoad = () => bgInfo('LoadingManager all loads finished');
+loadingManager.onError = (url) => bgErr(`LoadingManager error ${url}`);
+loadingManager.onProgress = (url, loaded, total) => { if(loaded%5===0) bgInfo(`LoadingManager progress ${url} ${loaded}/${total}`); };
 // FBX files reference textures as "2.fbm/NormalMap.png" (Windows .fbm folder) but
 // our project stores them under Cozy-Living-Room/textures/. Rewrite those URLs.
 try{
   loadingManager.setURLModifier((url)=>{
-    // url may be like "/backgrounds/Cozy-Living-Room/source/2.fbm/NormalMap.png"
-    // or "2.fbm/NormalMap.png" relative
+    const orig = url;
+    let out = url;
     if(url.includes('.fbm')){
       const fname = url.split('/').pop().split('\\').pop()
-      if(fname) return `/backgrounds/Cozy-Living-Room/textures/${fname.split('/').map(encodeURIComponent).join('/')}`
+      if(fname) out = `/backgrounds/Cozy-Living-Room/textures/${fname.split('/').map(encodeURIComponent).join('/')}`
     }
-    return url
+    if(orig !== out) bgInfo(`URLModifier ${orig} -> ${out}`);
+    // log every background/texture request for troubleshooting (throttled)
+    if(out.includes('/backgrounds/') || out.includes('/textures/')) bgInfo(`request ${out}`);
+    return out
   })
-}catch{}
+}catch(e){ bgErr('setURLModifier failed', e.message) }
 const loader = new THREE.TextureLoader(loadingManager)
 const fbxLoader = new FBXLoader(loadingManager)
 const gltfLoader = new GLTFLoader(loadingManager)
@@ -288,28 +310,37 @@ function frameCameraForImageOrGradient(){
 function loadModelFile(modelFile, onDone, onErr){
   const ext = modelFile.split('.').pop()?.toLowerCase() || ''
   const url = `/backgrounds/${modelFile.split('/').map(encodeURIComponent).join('/')}`
-  console.log('[bg] loading', url, 'ext', ext)
+  bgInfo('loadModelFile', `modelFile=${modelFile}`, `url=${url}`, `ext=${ext}`, `cached=${bgModelCache.has(modelFile)}`, `basePath=/backgrounds/${modelFile.split('/').slice(0,-1).map(encodeURIComponent).join('/')}/`);
+  // quick HEAD check to log HTTP status before Three.js tries to parse
+  fetch(url, { method: 'HEAD', cache: 'no-store' }).then(r=> bgInfo(`HEAD ${url} -> ${r.status} ${r.ok?'ok':'FAIL'} ct=${r.headers.get('content-type')||'?'} len=${r.headers.get('content-length')||'?'}`)).catch(e=> bgWarn(`HEAD ${url} error`, e.message));
   if(bgModelCache.has(modelFile)){
     const cached = bgModelCache.get(modelFile)
-    console.log('[bg] cache hit', modelFile)
+    bgInfo('cache hit', modelFile, `clone children=${cached.children?.length||0}`)
     onDone(cached.clone(true))
     return
   }
   toast(`Loading 3D background…`)
+  const tStart = performance.now();
   if(ext === 'fbx'){
-    // Ensure texture base path is correct so relative loads resolve to model folder first,
-    // then our LoadingManager URL modifier rewrites .fbm -> textures/
     const basePath = `/backgrounds/${modelFile.split('/').slice(0,-1).map(encodeURIComponent).join('/')}/`
-    try{ fbxLoader.setResourcePath(basePath); fbxLoader.setPath(basePath) }catch{}
+    bgInfo(`FBX setResourcePath=${basePath} (setPath cleared to avoid double prefix)`);
+    try{ fbxLoader.setResourcePath(basePath); fbxLoader.setPath('') }catch(e){ bgErr('setResourcePath failed', e.message)}
+    bgInfo(`FBXLoader.load url=${url} resourcePath=${basePath} path=''`);
     fbxLoader.load(url, (obj)=>{
-      console.log('[bg] FBX loaded, children', obj.children.length)
+      bgInfo('FBX loaded', `children=${obj.children.length}`, `ms=${(performance.now()-tStart).toFixed(0)}`, `modelFile=${modelFile}`);
       fitAndPlaceModel(obj)
       bgModelCache.set(modelFile, obj.clone(true))
       onDone(obj)
     }, (ev)=>{
-      if(ev && ev.loaded && ev.total) console.log('[bg] FBX progress', (ev.loaded/ev.total*100).toFixed(0)+'%')
+      if(ev && ev.loaded && ev.total) bgInfo('FBX progress', `${(ev.loaded/ev.total*100).toFixed(0)}%`, `loaded=${ev.loaded} total=${ev.total} url=${url}`)
+      else if(ev) bgInfo('FBX progress ev', JSON.stringify(ev).slice(0,300))
     }, (err)=>{
-      console.error('[bg] FBX load error', err)
+      bgErr('FBX load error', `url=${url} modelFile=${modelFile}`, `msg=${err?.message||String(err).slice(0,500)}`, `stack=${err?.stack?.slice(0,500)||''}`);
+      // try to diagnose HTTP
+      fetch(url, { cache:'no-store' }).then(async r=>{
+        const txt = await r.text().catch(()=>'');
+        bgErr(`FBX fetch fallback status=${r.status} body=${txt.slice(0,800)}`);
+      }).catch(e=> bgErr('FBX fetch fallback error', e.message));
       onErr(err)
     })
   } else if(ext === 'glb' || ext === 'gltf'){
@@ -353,14 +384,15 @@ function resolveBgEntry(id){
 }
 
 export function applyBackground(id, scene){
+  bgInfo('applyBackground called', `id=${id}`, `stored=${getRaw().backgroundId}`, `hasScene=${!!scene||!!sceneRef}`, `metaCacheLen=${bgMetaCache.length}`);
   if(scene) sceneRef = scene
   const s = sceneRef || scene
-  if(!s) return
+  if(!s){ bgErr('applyBackground no scene'); return; }
   const target = sceneRef || s
   const group = ensureBgGroup(target)
   const bgId = id || getRaw().backgroundId || 'gradient'
   const entry = resolveBgEntry(bgId)
-  console.log('[bg] apply', bgId, entry)
+  bgInfo('apply', `bgId=${bgId}`, `entry=${JSON.stringify(entry)}`, `curModelKey=${curModelKey}`, `groupVisible=${group.visible}`, `groupChildren=${group.children.length}`);
 
   if(entry.type==='gradient' || entry.id==='gradient'){
     clearBgGroup()
@@ -382,32 +414,35 @@ export function applyBackground(id, scene){
   }
 
   if(entry.type==='model'){
+    bgInfo('model branch', `bgId=${bgId} modelFile=${entry.modelFile||entry.file} entry=${JSON.stringify(entry)}`);
     if(bgSphere) bgSphere.visible = false
     setGroundVisible(false)
     if(bgTexture){ try{bgTexture.dispose()}catch{}; bgTexture=null; target.background = new THREE.Color(0x020617) }
     else target.background = new THREE.Color(0x020617)
     const modelFile = entry.modelFile || entry.file?.replace('/backgrounds/','') || entry.id
+    bgInfo(`modelFile resolved=${modelFile} curModelKey=${curModelKey} groupVisible=${group.visible} children=${group.children.length}`);
     if(curModelKey === modelFile && group.visible && group.children.length){
-      console.log('[bg] already showing', modelFile)
+      bgInfo('already showing', modelFile)
       return
     }
     clearBgGroup()
     group.visible = false
     curModelKey = modelFile
+    bgInfo(`calling loadModelFile ${modelFile}`);
     loadModelFile(modelFile, (obj)=>{
       if((getRaw().backgroundId||'gradient') !== bgId){
-        console.log('[bg] background changed while loading, discarding', bgId)
+        bgWarn('background changed while loading, discarding', `expected=${bgId} current=${getRaw().backgroundId}`);
         return
       }
       clearBgGroup()
       curModelKey = modelFile
       group.add(obj)
       group.visible = true
-      console.log('[bg] model added to scene, visible', group.visible, 'children', group.children.length)
+      bgInfo('model added to scene', `visible=${group.visible} children=${group.children.length} modelFile=${modelFile}`);
       frameCameraForRoom()
       toast(`Background: ${entry.name||modelFile} ✓`)
     }, (err)=>{
-      console.error('[bg] model load failed', modelFile, err?.message||err)
+      bgErr('model load failed', `modelFile=${modelFile} err=${err?.message||String(err).slice(0,600)}`);
       toast(`Background failed to load (${modelFile})`)
       if((getRaw().backgroundId||'gradient') === bgId){
         target.background = new THREE.Color(0x04070f)
@@ -421,53 +456,99 @@ export function applyBackground(id, scene){
   }
 
   // image
+  bgInfo(`image branch url=${entry.file || bgId} entry=${JSON.stringify(entry)}`);
   clearBgGroup()
   if(bgSphere) bgSphere.visible = false
   setGroundVisible(true)
   frameCameraForImageOrGradient()
   const url = entry.file || `/backgrounds/${bgId.split('/').map(encodeURIComponent).join('/')}`
+  bgInfo(`image url=${url} bgId=${bgId}`);
   if(bgTexture && bgTexture.userData?.__bgId === bgId){
+    bgInfo(`image cache hit ${bgId}`);
     target.background = bgTexture
     return
   }
   if(bgTexture){ try{ bgTexture.dispose()}catch{}; bgTexture=null }
   target.background = new THREE.Color(0x020617)
+  bgInfo(`image loader.load ${url}`);
   loader.load(url, (tex)=>{
+    bgInfo(`image loaded ${url} ${tex.image?.width}x${tex.image?.height}`);
     tex.colorSpace = THREE.SRGBColorSpace
     tex.userData = { __bgId: bgId }
     bgTexture = tex
     if((getRaw().backgroundId||'gradient') === bgId){
       target.background = tex
+      bgInfo(`image applied ${bgId}`);
     }
-  }, undefined, ()=>{
+  }, undefined, (err)=>{
+    bgErr(`image load failed ${url} err=${err?.message||String(err).slice(0,400)}`);
     target.background = new THREE.Color(0x04070f)
     if(bgSphere) bgSphere.visible = true
   })
 }
 
 export async function fetchBackgrounds(){
-  // Try canonical, alias, and direct Vite-style endpoints — the Vite proxy
-  // is intentionally selective (does NOT proxy /api/backgrounds) so this
-  // request is served locally by backgroundsLiveSync even when the backend
-  // is down. The fallbacks cover the Electron/dist case.
   const urls = ['/api/backgrounds', '/api/backgrounds/list', '/backgrounds.json']
+  bgInfo(`fetchBackgrounds trying ${urls.join(', ')} ... href=${location.href}`);
   for(const url of urls){
     try{
+      bgInfo(`fetch ${url} ...`);
       const r = await fetch(url, { cache:'no-store' })
-      if(!r.ok) continue
+      bgInfo(`fetch ${url} -> status=${r.status} ok=${r.ok} ct=${r.headers.get('content-type')}`);
+      if(!r.ok){
+        const txt = await r.text().catch(()=>'');
+        bgWarn(`fetch ${url} not ok body=${txt.slice(0,600)}`);
+        continue
+      }
       const list = await r.json()
       const arr = Array.isArray(list) ? list : []
-      if(!arr.length && url !== urls[urls.length-1]) continue
+      bgInfo(`fetch ${url} parsed len=${arr.length} data=${JSON.stringify(arr).slice(0,1200)}`);
+      if(!arr.length && url !== urls[urls.length-1]){
+        bgWarn(`fetch ${url} empty, trying next`);
+        continue
+      }
       setBgMeta(arr)
-      console.log('[bg] fetched', arr, 'from', url)
+      bgInfo(`fetchBackgrounds success from ${url} len=${arr.length}`);
+      // expose for troubleshooting
+      try{ window.__bgLastFetch = { url, list: arr, time: Date.now() }; }catch{}
       return arr
-    }catch(e){ /* try next */ }
+    }catch(e){
+      bgErr(`fetch ${url} exception`, e.message, e.stack?.slice(0,400)||'');
+      continue
+    }
   }
-  console.warn('[bg] fetch failed — all endpoints unreachable')
+  bgErr('fetchBackgrounds FAILED — all endpoints unreachable', `tried=${urls.join(', ')}`);
+  try{ window.__bgLastFetch = { error: 'all failed', urls, time: Date.now() }; }catch{}
   return []
 }
 
 export function setBackground(id){
+  bgInfo(`setBackground ${id}`);
   setSettings({ backgroundId: id })
   applyBackground(id, sceneRef)
 }
+
+// ── troubleshooting helpers ───────────────────────────────────────────────
+try{
+  window.__bgTroubleshoot = async ()=>{
+    bgInfo('=== __bgTroubleshoot start ===');
+    bgInfo(`bgGroup=${!!bgGroup} visible=${bgGroup?.visible} children=${bgGroup?.children?.length} curModelKey=${curModelKey} bgSphere=${!!bgSphere} scene=${!!sceneRef} camera=${!!cameraRef}`);
+    bgInfo(`bgMetaCache len=${bgMetaCache.length} data=${JSON.stringify(bgMetaCache).slice(0,1200)}`);
+    bgInfo(`stored backgroundId=${getRaw().backgroundId}`);
+    const list = await fetchBackgrounds();
+    bgInfo(`fetchBackgrounds returned ${list.length}`);
+    // try HEAD for model file if present
+    const e = resolveBgEntry(getRaw().backgroundId||'Cozy-Living-Room');
+    bgInfo(`resolveBgEntry for current -> ${JSON.stringify(e)}`);
+    if(e?.modelFile){
+      const url = `/backgrounds/${e.modelFile.split('/').map(encodeURIComponent).join('/')}`;
+      bgInfo(`HEAD ${url} ...`);
+      try{ const r=await fetch(url,{method:'HEAD',cache:'no-store'}); bgInfo(`HEAD ${url} -> ${r.status} ct=${r.headers.get('content-type')} len=${r.headers.get('content-length')}`); }catch(err){ bgErr(`HEAD ${url} failed`, err.message) }
+    }
+    bgInfo('=== __bgTroubleshoot end ===');
+    return { bgGroup: !!bgGroup, bgMetaCache, list, entry: resolveBgEntry(getRaw().backgroundId) };
+  };
+  window.__bgLogs = window.__bgLogs||[];
+  window.__getBgLogs = ()=> (window.__bgLogs||[]).join('\n');
+  bgInfo('troubleshooting helpers exposed as window.__bgTroubleshoot() and window.__getBgLogs()');
+}catch{}

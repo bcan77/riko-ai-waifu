@@ -5,9 +5,9 @@
  */
 
 export const DEFAULTS = {
-  version: 10,
-  // Locale
-  locale: 'tr',               // 'en' | 'tr'
+  version: 11,
+  // i18n
+  language: 'en', // 'en' | 'tr'
   // Characters
   modelId: 'ellen',
   outfitId: 'default',
@@ -30,13 +30,13 @@ export const DEFAULTS = {
   gravity: -18,
   eyeTracking: true,
   hitboxing: true,
-  // Graphics — cozy villa interior (warm window + soft bounce, not sandbox/GMod flat)
-  keyIntensity: 1.10,
-  fillIntensity: 0.42,
-  rimIntensity: 0.38,
-  backIntensity: 0.18,
-  ambientIntensity: 0.58,
-  exposure: 0.96,
+  // Graphics — game-like (ZZZ/Genshin high-key anime: bright fill, strong rim, even ambient)
+  keyIntensity: 1.45,
+  fillIntensity: 0.68,
+  rimIntensity: 0.92,
+  backIntensity: 0.22,
+  ambientIntensity: 0.78,
+  exposure: 1.08,
   shadows: true,
   ground: true,
   dprCap: 'auto',          // 'auto' | '1.25' | '1.5' | '1.75' | '2'
@@ -76,6 +76,8 @@ function sanitize(raw){
   const o = {}
   // version
   o.version = Number(raw.version) || DEFAULTS.version
+  // i18n
+  o.language = ['en','tr'].includes(raw.language) ? raw.language : DEFAULTS.language
   // characters
   o.modelId = ['ellen','jane','zhu'].includes(raw.modelId) ? raw.modelId : DEFAULTS.modelId
   o.outfitId = (typeof raw.outfitId === 'string' && /^[a-z0-9_-]{1,32}$/.test(raw.outfitId)) ? raw.outfitId : DEFAULTS.outfitId
@@ -131,8 +133,6 @@ function sanitize(raw){
   o.panelCollapsed = raw.panelCollapsed !== false
   if (typeof raw.panelCollapsed === 'boolean') o.panelCollapsed = raw.panelCollapsed
   o.theme = typeof raw.theme === 'string' ? raw.theme : DEFAULTS.theme
-  // locale
-  o.locale = ['en','tr'].includes(raw.locale) ? raw.locale : DEFAULTS.locale
   // backgrounds
   o.backgroundId = typeof raw.backgroundId === 'string' && raw.backgroundId ? raw.backgroundId : DEFAULTS.backgroundId
   o.backgroundBlur = clamp(parseFloat(raw.backgroundBlur ?? DEFAULTS.backgroundBlur), 0, 20)
@@ -198,9 +198,23 @@ export function load(){
     }
     clean.version = 9
   }
-  // migrate v9 → v10: add locale (default tr)
+  // migrate v9 → v10: game-like high-key anime (ZZZ/Genshin)
   if ((clean.version||0) < 10) {
-    if (!clean.locale || !['en','tr'].includes(clean.locale)) clean.locale = DEFAULTS.locale
+    const near = (a,b)=> Math.abs(a-b) < 0.09
+    // if user was on villa defaults (1.10/0.42/0.38/0.18/0.58/0.96) → auto-upgrade to game
+    if (near(clean.keyIntensity,1.10) && near(clean.fillIntensity,0.42) && near(clean.rimIntensity,0.38)) {
+      clean.keyIntensity = DEFAULTS.keyIntensity
+      clean.fillIntensity = DEFAULTS.fillIntensity
+      clean.rimIntensity = DEFAULTS.rimIntensity
+      clean.backIntensity = DEFAULTS.backIntensity
+      clean.ambientIntensity = DEFAULTS.ambientIntensity
+      clean.exposure = DEFAULTS.exposure
+    }
+    clean.version = 10
+  }
+  // migrate v10 → v11: add language
+  if ((clean.version||0) < 11) {
+    if(!['en','tr'].includes(clean.language)) clean.language = DEFAULTS.language
     clean.version = DEFAULTS.version
   }
   _cache = clean

@@ -4,5 +4,9 @@
   "commit": "unknown",
   "branch": "unknown",
   "dirty": false,
-  "buildTime": "2026-09-04T19:09:44.875Z"
+  "buildTime": "2026-09-12T11:05:58.704Z",
+  "continent": "EU",
+  "versionNumber": "0.3.9",
+  "revision": "01",
+  "npmVersion": "0.3.9"
 }

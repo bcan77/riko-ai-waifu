@@ -1,11 +1,11 @@
 {
   "name": "@waifu/desktop",
-  "version": "0.1.0",
+  "version": "0.3.9",
   "private": true,
   "type": "module",
   "main": "electron/main.js",
   "scripts": {
-    "dev": "concurrently \"npx vite --config vite.config.js\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "concurrently --kill-others --names vite,electron \"npx vite --config vite.config.js\" \"wait-on http://127.0.0.1:5173 --timeout 30000 && electron .\"",
     "dev:vite": "npx vite --config vite.config.js",
     "build": "npm --prefix ../../waifu-viewer run build && electron-builder",
     "start": "electron .",

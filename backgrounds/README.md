@@ -1,23 +1,19 @@
-> **Dil / Language:** 🇹🇷 Türkçe (bu dosya) | [🇬🇧 English](README.en.md)
+# Backgrounds
 
-# Arkaplanlar
+Drop images here to change the stage backdrop in the viewer.
 
-Görüntüleyicide sahne arkaplanını değiştirmek için buraya resimler bırak.
+- Supports `.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`, `.gif`
+- Nested folders are supported — the picker shows `folder/name`
+- Two built-ins are always available: **Gradient** (blue/black) and **Solid**
+- Changes are live — no reload needed (dev) and persisted via Settings → `backgroundId`
+- Files are served at `/backgrounds/<path>` and listed at `GET /api/backgrounds`
 
-- `.jpg`, `.jpeg`, `.png`, `.webp`, `.bmp`, `.gif` desteklenir
-- İç içe klasörler desteklenir — seçici `klasör/isim` olarak gösterir
-- İki yerleşik her zaman mevcut: **Gradient** (mavi/siyah) ve **Solid**
-- Değişiklikler canlı — yeniden yükleme gerekmez (dev) ve Ayarlar → `backgroundId` ile kalıcı
-- Dosyalar `/backgrounds/<path>` altında sunulur ve `GET /api/backgrounds` ile listelenir
-
-Örnek:
+Example:
 ```
 backgrounds/
   beach.png
   night-city.jpg
-  Cozy-Living-Room/  # mevcut örnek dokular (ayrıca gösterilir)
+  Cozy-Living-Room/  # existing sample textures (also shown)
 ```
 
-Uygulamada seç: **Panel → Scene → Background** veya ana menüden.
-
-> **Dil:** [🇹🇷 Türkçe](README.md) | [🇬🇧 English](README.en.md)
+Pick them in the app: **Panel → Scene → Background** or from the main menu.

@@ -336,11 +336,15 @@ const ground = (() => {
   return out
 })()
 
-// Lights — cozy villa interior (warm window sunlight + soft interior bounce)
-scene.add(new THREE.HemisphereLight(0xfff1d6, 0x3a2a1a, 0.82))
+// Lights — game-like (ZZZ/Genshin high-key anime)
+// Reference: soft studio, even fill, strong warm rim on hair, light ground bounce.
+// Character and background share lights but character stays ~0.3 stops brighter.
+const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffe8cc, 1.05)
+hemiLight.position.set(0, 20, 0)
+scene.add(hemiLight)
 
-const keyLight = new THREE.DirectionalLight(0xfff4dd, 1.10)
-keyLight.position.set(6, 14, 7)
+const keyLight = new THREE.DirectionalLight(0xfff6e8, 1.45)
+keyLight.position.set(4.5, 10, 6)
 keyLight.castShadow = true
 keyLight.shadow.mapSize.set(2048,2048)
 keyLight.shadow.camera.near = 0.5
@@ -349,38 +353,67 @@ keyLight.shadow.camera.left = -22
 keyLight.shadow.camera.right = 22
 keyLight.shadow.camera.top = 22
 keyLight.shadow.camera.bottom = -22
-keyLight.shadow.bias = -0.0006
-keyLight.shadow.radius = 5
+keyLight.shadow.bias = -0.0008
+keyLight.shadow.radius = 4
+keyLight.shadow.normalBias = 0.02
 scene.add(keyLight)
 scene.add(keyLight.target)
 keyLight.target.position.set(0, 8, 0)
 
-const fillLight = new THREE.DirectionalLight(0xffe6c8, 0.42)
-fillLight.position.set(-6, 9, -4)
+const fillLight = new THREE.DirectionalLight(0xd8e8ff, 0.68)
+fillLight.position.set(-5.2, 7.5, -4.2)
 scene.add(fillLight)
 
-const rimLight = new THREE.DirectionalLight(0xffd6a8, 0.38)
-rimLight.position.set(-4, 10, 8)
+const rimLight = new THREE.DirectionalLight(0xffdfb5, 0.92)
+rimLight.position.set(-3.2, 9.2, -7.5)
 scene.add(rimLight)
 
-const backLight = new THREE.DirectionalLight(0xffe0b5, 0.18)
-backLight.position.set(3, 9, -11)
+const backLight = new THREE.DirectionalLight(0xffe4c0, 0.22)
+backLight.position.set(2.2, 6.5, -8.5)
 scene.add(backLight)
 
-// warm table lamp — subtle interior glow (not a flood)
-const lampLight = new THREE.PointLight(0xffad5a, 0.75, 14, 2)
+// subtle interior bounce — kept very low for game look (was villa lamp 0.75)
+const lampLight = new THREE.PointLight(0xffc07a, 0.22, 16, 2)
 lampLight.position.set(-1.8, 5.2, 0.5)
 lampLight.decay = 2
 scene.add(lampLight)
-// soft window bounce near the big window wall
-const windowBounce = new THREE.PointLight(0xfff2d0, 0.32, 14, 2)
+// soft sky bounce from window side — also subtle
+const windowBounce = new THREE.PointLight(0xe8f0ff, 0.18, 18, 2)
 windowBounce.position.set(5, 8, 6)
 scene.add(windowBounce)
 
-const ambient = new THREE.AmbientLight(0xfff0d5, 0.58)
+const ambient = new THREE.AmbientLight(0xfff1e6, 0.78)
 scene.add(ambient)
-renderer.toneMappingExposure = 0.96
+// dedicated face fill — always in front of the face (face-forward, not N·L)
+// Genshin trick: face lighting uses head forward, not vertex normal, so face never goes dark in profile.
+// We add a low, non-shadow directional that tracks the head bone.
+const faceLight = new THREE.DirectionalLight(0xfff2e0, 0.55)
+faceLight.position.set(0, 15.5, 18)
+faceLight.target.position.set(0, 15, 0)
+faceLight.castShadow = false
+scene.add(faceLight)
+scene.add(faceLight.target)
+window.faceLight = faceLight // debug: tweak intensity in console
+let headBone = null
+window._getHeadBone = ()=> headBone
+// helper to find head bone from skeleton
+function bindHeadBone(){
+  headBone = null
+  try{
+    const bones = mmdMesh?.skeleton?.bones || helper?.objects?.get(mmdMesh)?.skeleton?.bones || []
+    headBone = bones.find(b=> {
+      const n=(b.name||'').toLowerCase()
+      return n==='頭' || n==='head' || n==='頭部' || n.includes('head') || n.includes('頭')
+    }) || null
+    if(headBone) console.log(`[face] head bone bound: ${headBone.name} idx=${bones.indexOf(headBone)}`)
+    else console.log('[face] head bone not found — faceLight will stay static')
+    window._headBone = headBone
+  }catch(e){ console.warn('[face] bindHeadBone failed', e) }
+}
+renderer.toneMappingExposure = 1.08
 renderer.physicallyCorrectLights = true
+// game-like: slightly higher exposure, ACES stays, add subtle ambient for face
+try{ hemiLight.intensity = 1.05; ambient.intensity = 0.78; }catch{}
 
 // ---- Apply persisted settings to scene immediately
 function applyInitialSettings(){
@@ -706,20 +739,109 @@ async function loadModel(model){
     sanitizePhysics(mmdMesh.geometry.userData.MMD)
   }
 
+  // ---- Game face lightmap fix ----
+  // Genshin/ZZZ uses a lightmap/SDF with face-forward (dot(F,L) not dot(N,L)) so
+  // the face never goes dark in side light. We emulate without external textures:
+  //  - soft 1D gradient for face (not harsh skin.bmp)
+  //  - emissive boost so face albedo stays visible even at dotNL=-1
+  //  - no cast/receive shadow for face to avoid nose acne
+  function isFaceMat(mat){
+    const n = (mat.name||'').trim()
+    // only the skin base, not eyes/brow/lash (they share 颜.tga but have different names)
+    // exact match for face skin; eye mats are 目/白目/睫/眉
+    return n === '颜' || n === '颜2' || n === '顔' || n === 'Face' || n.toLowerCase() === 'face'
+  }
+  function createSoftFaceGradient(){
+    try{
+      const c = document.createElement('canvas'); c.width = 256; c.height = 1
+      const g = c.getContext('2d')
+      const grad = g.createLinearGradient(0,0,256,0)
+      // soft ramp: shadow 0.65 → mid 0.88 → lit 1.0 (was skin.bmp ~0.45 harsh)
+      grad.addColorStop(0.00, '#a6a6a6')
+      grad.addColorStop(0.35, '#c2c2c2')
+      grad.addColorStop(0.55, '#e2e2e2')
+      grad.addColorStop(0.75, '#f2f2f2')
+      grad.addColorStop(1.00, '#ffffff')
+      g.fillStyle = grad; g.fillRect(0,0,256,1)
+      const tex = new THREE.CanvasTexture(c)
+      tex.colorSpace = THREE.NoColorSpace
+      tex.minFilter = THREE.NearestFilter
+      tex.magFilter = THREE.NearestFilter
+      tex.wrapS = THREE.ClampToEdgeWrapping
+      tex.wrapT = THREE.ClampToEdgeWrapping
+      tex.needsUpdate = true
+      return tex
+    }catch{ return null }
+  }
+  const _faceGradient = createSoftFaceGradient()
+  let _faceMeshes = []
+  let _faceMatCount = 0
   mmdMesh.traverse(o=>{
     if(o.isMesh){
+      const mats = Array.isArray(o.material) ? o.material : [o.material]
+      const anyFace = mats.some(isFaceMat)
+      // keep shadow for all — face lightmap handles nose acne, not shadow disable
       o.castShadow = true
       o.receiveShadow = false
-      if(o.material){
-        const mats = Array.isArray(o.material) ? o.material : [o.material]
-        mats.forEach(mat=>{
-          if(mat.emissive) mat.emissiveIntensity = 0.12
-          mat.alphaToCoverage = false
-          if(mat.transparent) mat.depthWrite = false
-        })
-      }
+      if(anyFace) _faceMeshes.push(o)
+      mats.forEach(mat=>{
+        // base
+        const wasFace = isFaceMat(mat)
+        if(mat.emissive){
+          // gentle lift for face only — was 0.12, now 0.32 keeps details visible without blowing out
+          mat.emissiveIntensity = wasFace ? 0.32 : 0.12
+          if(wasFace) mat.emissive.set(0xffffff) // keep original hue, just brighter
+        }
+        mat.alphaToCoverage = false
+        if(mat.transparent) mat.depthWrite = false
+        else mat.depthWrite = true
+        // face lightmap — minimal, non-destructive
+        if(wasFace){
+          _faceMatCount++
+          // soft gradient: keep skin.bmp but make it brighter if we have our soft ramp
+          // Only replace if the original is harsh skin.bmp (32px). Our 256 ramp is softer.
+          // Keep emissiveMap as null — using same map as diffuse doubles the texture fetch and can wash out.
+          // Instead, just lift emissive slightly and soften gradient.
+          if(_faceGradient && mat.gradientMap){
+            // check if original gradient is small (32x32) — replace with soft
+            try{
+              const img = mat.gradientMap.image
+              const w = img?.width || 0
+              if(w <= 32){
+                mat.gradientMap = _faceGradient
+                mat.needsUpdate = true
+              }
+            }catch{
+              mat.gradientMap = _faceGradient
+              mat.needsUpdate = true
+            }
+          }
+          if('roughness' in mat) mat.roughness = 0.85
+          if('metalness' in mat) mat.metalness = 0.02
+        }
+      })
     }
   })
+  // expose for debug
+  window._faceMeshes = _faceMeshes
+  console.log(`[face] fixed ${_faceMeshes.length} meshes, ${_faceMatCount} face mats, gradient=${!!_faceGradient}`)
+  // quick toggle for debugging invisible face: window.__faceFixOff()
+  window.__faceFixOff = ()=>{
+    _faceMeshes.forEach(m=>{
+      const mats = Array.isArray(m.material)? m.material:[m.material]
+      mats.forEach(mat=>{ if(isFaceMat(mat) && mat.emissive) mat.emissiveIntensity=0.12 })
+    })
+    console.log('[face] fix off — emissive 0.12')
+  }
+  window.__faceFixOn = ()=>{
+    _faceMeshes.forEach(m=>{
+      const mats = Array.isArray(m.material)? m.material:[m.material]
+      mats.forEach(mat=>{ if(isFaceMat(mat) && mat.emissive){ mat.emissive.set(0xffffff); mat.emissiveIntensity=0.32 }})
+    })
+    console.log('[face] fix on — emissive 0.32')
+  }
+  // bind head bone for faceLight tracking (game lightmap)
+  try{ bindHeadBone() }catch{}
 
   // apply persisted model offset/rotation (looking direction) before physics bind
   try{ _applyModelDbg() }catch{}
@@ -1190,11 +1312,14 @@ function initSetupWizard(){
     const s = getSettingsRaw()
     if(!s.onboarded && (s.openrouterApiKey || s.groqApiKey)) setOnboarded(true)
   }catch{}
-  // with main menu present, don't auto-popup over it; menu's Setup button opens wizard
-  // only auto-show if user already dismissed menu this session (direct reload without menu)
+  // first-boot: show macOS-like setup immediately (covers main menu)
   if(setupWizard.shouldShow()){
+    try{ document.getElementById('mainMenu')?.classList.add('hidden') }catch{}
+    setTimeout(()=> setupWizard.open(), 400)
+  } else {
+    // with main menu present, don't auto-popup over it; only auto-show if menu dismissed
     const menuDismissed = (()=>{ try{ return sessionStorage.getItem('waifu:menuDismissed')==='1'}catch{return false} })()
-    if(menuDismissed){
+    if(menuDismissed && setupWizard.shouldShow()){
       setTimeout(()=> setupWizard.open(), 700)
     }
   }
@@ -1822,6 +1947,24 @@ function animate(){
 
   if(helper){
     try{ helper.update(dt) }catch(e){ /* physics warmup */ }
+  }
+  // face light tracks head bone (face-forward, not N·L) — keeps face lit in profile
+  if(headBone && faceLight && mmdMesh){
+    try{
+      const headPos = new THREE.Vector3(); headBone.getWorldPosition(headPos)
+      const headQuat = new THREE.Quaternion(); headBone.getWorldQuaternion(headQuat)
+      const fwd = new THREE.Vector3(0,0,1).applyQuaternion(headQuat)
+      if(fwd.lengthSq() < 0.05) fwd.set(0,0,1).applyQuaternion(mmdMesh.quaternion)
+      fwd.normalize()
+      const lightPos = headPos.clone().addScaledVector(fwd, 7).add(new THREE.Vector3(0,1.0,0))
+      faceLight.position.copy(lightPos)
+      faceLight.target.position.copy(headPos)
+      faceLight.target.updateMatrixWorld()
+      // subtle backlit boost
+      const keyDir = new THREE.Vector3().copy(keyLight.position).sub(keyLight.target.position).normalize()
+      const backlit = fwd.dot(keyDir) < -0.20 ? 1 : 0
+      faceLight.intensity = 0.55 + backlit*0.20
+    }catch{}
   }
 
   // morph driver: sample viseme from audio clock (or perf if no audio)

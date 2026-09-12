@@ -151,6 +151,12 @@ export function mountSettingsModal(opts = {}){
                   <input type="range" min="0" max="1.5" step="0.05" value="${s.ambientIntensity}" data-field="ambientIntensity"></label></div>
                 <div class="settings-row"><label>Exposure <span data-bind="exposure">${s.exposure.toFixed(2)}</span>
                   <input type="range" min="0.3" max="2" step="0.05" value="${s.exposure}" data-field="exposure"></label></div>
+                <div class="settings-row" style="gap:8px; flex-wrap:wrap">
+                  <span style="font-size:12px; opacity:0.7; margin-right:6px">Presets:</span>
+                  <button class="btn btn-sm" data-preset="game" style="padding:4px 10px; font-size:12px">Game (ZZZ)</button>
+                  <button class="btn btn-sm" data-preset="villa" style="padding:4px 10px; font-size:12px">Villa</button>
+                  <button class="btn btn-sm" data-preset="studio" style="padding:4px 10px; font-size:12px">Studio</button>
+                </div>
               </div>
               <div class="settings-card">
                 <h4>Quality</h4>
@@ -294,15 +300,6 @@ export function mountSettingsModal(opts = {}){
 
           <div class="settings-panel ${activeTab==='app'?'active':''}" data-panel="app">
             <h3>App & Display</h3>
-            <div class="settings-card" style="margin-bottom:10px">
-              <h4>Language / Dil</h4>
-              <div class="settings-row"><label>Language — Dil
-                <select data-field="locale">
-                  <option value="tr" ${s.locale==='tr'?'selected':''}>🇹🇷 Türkçe</option>
-                  <option value="en" ${s.locale==='en'?'selected':''}>🇬🇧 English</option>
-                </select></label></div>
-              <div class="settings-hint">Setup wizard + docs language. / Kurulum sihirbazı ve döküman dili.</div>
-            </div>
             <div class="settings-grid">
               <div class="settings-card">
                 <h4>Backend</h4>
@@ -620,6 +617,22 @@ export function mountSettingsModal(opts = {}){
       const f = e.target.files?.[0]; if(!f) return
       const txt = await f.text()
       try{ importJson(txt); render(); showImportStatus('Imported ♡ — applied'); onAction({type:'settingsImported'}) }catch(err){ showImportStatus('Import failed: '+err.message) }
+    })
+    // lighting presets — Game (ZZZ) vs Villa vs Studio
+    root.querySelectorAll('[data-preset]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const p = btn.dataset.preset
+        const presets = {
+          game:  { keyIntensity:1.45, fillIntensity:0.68, rimIntensity:0.92, backIntensity:0.22, ambientIntensity:0.78, exposure:1.08 },
+          villa: { keyIntensity:1.10, fillIntensity:0.42, rimIntensity:0.38, backIntensity:0.18, ambientIntensity:0.58, exposure:0.96 },
+          studio:{ keyIntensity:1.60, fillIntensity:0.85, rimIntensity:1.10, backIntensity:0.30, ambientIntensity:0.85, exposure:1.12 },
+        }
+        const preset = presets[p]
+        if(!preset) return
+        set(preset)
+        render()
+        onAction({type:'toast', text:`Lighting: ${p} preset applied`})
+      })
     })
     root.querySelector('[data-act="reset-all"]')?.addEventListener('click', ()=>{
       if(!confirm('Reset all settings to defaults?')) return
