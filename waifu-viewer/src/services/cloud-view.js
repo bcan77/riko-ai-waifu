@@ -211,6 +211,8 @@ export async function refreshCloudView(){
   if(sub) sub.textContent = t('cv.sub')
   const up = document.getElementById('btnCloudUpload')
   if(up) up.textContent = t('cv.upload')
+  const back = document.getElementById('btnCloudBack')
+  if(back) back.textContent = t('cv.back')
 }
 
 function esc(s){ return String(s ?? '').replace(/</g, '&lt;') }
@@ -223,17 +225,20 @@ function trackMouse(cx, cy){
 async function uploadFiles(list){
   const f = list?.[0]
   if(!f) return
+  const btn = document.getElementById('btnCloudUpload')
+  const orig = btn ? btn.textContent : ''
+  if(btn){ btn.disabled = true; btn.textContent = t('cv.uploading') }
   try{
     const fd = new FormData()
     fd.append('file', f)
-    toastFn(t('cloud.uploading', { n: f.name }))
     const r = await fetch('/api/cloud/upload', { method: 'POST', body: fd })
     const j = await r.json().catch(() => ({}))
     if(!r.ok) throw new Error(j.detail || ('api ' + r.status))
-    toastFn(t('cv.nodeAdded'))
+    toastFn(t('cv.nodeAdded') + (j.file?.vision?.model ? ` (${j.file.vision.model})` : ''))
     await refreshCloudView()
     if(j.file?.id) select(j.file.id)
   }catch(e){ toastFn(t('ext.failed', { e: e?.message || e })) }
+  if(btn){ btn.disabled = false; btn.textContent = orig || t('cv.upload') }
 }
 
 async function select(id){
@@ -347,6 +352,10 @@ export function initCloudView(opts = {}){
   })
 
   uploadBtn?.addEventListener('click', ()=> fileInput?.click())
+  document.getElementById('btnCloudBack')?.addEventListener('click', ()=>{
+    if(window.__setScreen) window.__setScreen('dashboard')
+    else document.getElementById('btnDash')?.click()
+  })
   fileInput?.addEventListener('change', async ()=>{
     const f = fileInput.files?.[0]
     fileInput.value = ''

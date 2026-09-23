@@ -260,12 +260,13 @@ body[data-screen="stage"] .dashboard{display:none}
 @media(max-width:520px){.dash-grid{grid-template-columns:1fr}.dash-actions .btn{flex:1}}
 
 /* ══ Neural Cloud realm — mesh backdrop + node graph ════════════════ */
-.cloud-view{position:fixed;inset:0;z-index:33;overflow:hidden;background:#020617}
+/* NOTE: realm stays BELOW topbar (20) so ⌂/⚙ remain reachable; head clears it. */
+.cloud-view{position:fixed;inset:0;z-index:15;overflow:hidden;background:#020617}
 #cloudMesh{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
 #cloudGraph{position:absolute;inset:0;width:100%;height:100%;touch-action:none;cursor:grab}
 #cloudGraph:active{cursor:grabbing}
 .cloud-view.dropping #cloudGraph{outline:2px dashed rgba(56,189,248,.6);outline-offset:-12px;border-radius:18px}
-.cloud-head{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:clamp(18px,4vh,36px) clamp(16px,4vw,40px) 0;pointer-events:none;animation:fadeSlideIn .5s var(--ease-out) backwards}
+.cloud-head{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:64px clamp(16px,4vw,40px) 0;pointer-events:none;animation:fadeSlideIn .5s var(--ease-out) backwards}
 .cloud-head-actions{pointer-events:auto;display:flex;gap:8px}
 #btnCloudUpload{padding:10px 20px;border-radius:12px;font-size:13px}
 .cloud-title{margin:6px 0 4px;font-size:clamp(28px,4.6vw,44px);font-weight:800;letter-spacing:.02em;line-height:1.05}
@@ -313,7 +314,7 @@ body[data-screen="stage"] .dashboard{display:none}
 @media(max-width:640px){.build-badge{bottom:4px;right:4px;font-size:8px;padding:3px 6px}}
 
 /* ── Toast ──────────────────────────────────────────────────────── */
-.toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(12,17,32,0.94);border:1px solid rgba(148,163,184,0.12);color:var(--text);padding:10px 14px;border-radius:12px;font-size:12.5px;font-weight:600;opacity:0;pointer-events:none;transition:all .26s cubic-bezier(.16,1,.3,1);z-index:30;box-shadow:0 14px 36px rgba(0,0,0,0.48);max-width:min(520px, calc(100vw - 24px));text-align:center}
+.toast{position:fixed;bottom:76px;left:50%;transform:translateX(-50%) translateY(10px);background:rgba(12,17,32,0.94);border:1px solid rgba(148,163,184,0.12);color:var(--text);padding:10px 14px;border-radius:12px;font-size:12.5px;font-weight:600;opacity:0;pointer-events:none;transition:all .26s cubic-bezier(.16,1,.3,1);z-index:60;box-shadow:0 14px 36px rgba(0,0,0,0.48);max-width:min(520px, calc(100vw - 24px));text-align:center}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
 /* ── Chat ───────────────────────────────────────────────────────── */

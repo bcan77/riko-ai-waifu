@@ -1981,6 +1981,7 @@ function setScreen(name){
     try{ window.__cloudRefresh() }catch{}
   }
 }
+window.__setScreen = setScreen
 /** Static dashboard chrome in the user's language (dynamic numbers handled by refreshDashboard). */
 function applyDashboardI18n(){
   const set = (id, key) => { const el = document.getElementById(id); if(el) el.textContent = t(key) }

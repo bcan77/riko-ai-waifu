@@ -149,6 +149,7 @@ const STR = {
     // neural cloud realm (full-screen mesh view)
     'cv.sub': 'Every file you upload becomes a node. Click one to inspect it.',
     'cv.upload': '+ Upload',
+    'cv.uploading': 'Uploading…',
     'cv.hint': 'drag to pan • scroll to zoom • drag nodes to arrange',
     'cv.empty': 'Upload your first file to grow the mesh →',
     'cv.idLabel': 'id',
@@ -158,6 +159,7 @@ const STR = {
     'cv.openOrig': 'Open original',
     'cv.nodeAdded': 'Node added ♡',
     'cv.deleted': 'Node removed',
+    'cv.back': '← Back',
     'cv.nodes': '{n} nodes',
     'cv.openMesh': 'Open mesh →',
     'dash.cloudMeta': '{n} nodes in the mesh',
@@ -310,6 +312,7 @@ const STR = {
     // neural cloud realm (full-screen mesh view)
     'cv.sub': 'Yüklediğin her dosya bir düğüm olur. İncelemek için birine tıkla.',
     'cv.upload': '+ Yükle',
+    'cv.uploading': 'Yükleniyor…',
     'cv.hint': 'sürükle: kaydır • tekerlek: yakınlaştır • düğümleri düzenle',
     'cv.empty': 'Ağı büyütmek için ilk dosyanı yükle →',
     'cv.idLabel': 'id',
@@ -319,6 +322,7 @@ const STR = {
     'cv.openOrig': 'Orijinali aç',
     'cv.nodeAdded': 'Düğüm eklendi ♡',
     'cv.deleted': 'Düğüm silindi',
+    'cv.back': '← Geri',
     'cv.nodes': '{n} düğüm',
     'cv.openMesh': 'Ağı aç →',
     'dash.cloudMeta': 'ağda {n} düğüm',
