@@ -253,6 +253,8 @@ export default defineConfig({
       '/api/config': 'http://localhost:8000',
       // /api/version proxied so needsRebuild/hasDist from backend is visible
       '/api/version': 'http://localhost:8000',
+      '/api/cloud': 'http://localhost:8000',
+      '/api/content': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true },
     },
   },

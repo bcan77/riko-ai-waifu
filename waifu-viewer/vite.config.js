@@ -461,6 +461,8 @@ export default defineConfig({
       '/api/settings': 'http://localhost:8000',
       '/api/version': 'http://localhost:8000',
       '/api/config': 'http://localhost:8000',
+      '/api/cloud': 'http://localhost:8000',
+      '/api/content': 'http://localhost:8000',
       '/ws': { target: 'ws://localhost:8000', ws: true },
     },
   },
