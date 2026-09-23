@@ -28,6 +28,20 @@ let win = null;
 let tray = null;
 let backendProc = null;
 
+// ── packaged vs dev paths ────────────────────────────────────────────
+// dev (electron .):        repo root layout — backend/, waifu-viewer/dist, content in repo
+// packaged (AppImage/exe): extraResources — web/, backend/, VERSION, content/packs.json;
+//                          user content lives writable in userData/content
+const isPackaged = app.isPackaged;
+const RES_ROOT = isPackaged ? process.resourcesPath : path.resolve(__dirname, '../../..');
+const WEB_DIR = isPackaged ? path.join(RES_ROOT, 'web') : path.resolve(__dirname, '../../../waifu-viewer/dist');
+const BACKEND_DIR = isPackaged ? path.join(RES_ROOT, 'backend') : path.resolve(__dirname, '../../../backend');
+let CONTENT_DIR = null;
+try {
+  CONTENT_DIR = path.join(app.getPath('userData'), 'content');
+  for(const sub of ['characters','models','backgrounds']) fs.mkdirSync(path.join(CONTENT_DIR, sub), { recursive:true });
+} catch(e){ console.warn('[content] user content dir unavailable', e?.message||e); }
+
 // ── troubleshooting logger ───────────────────────────────────────────────
 let LOG_FILE = null;
 try { LOG_FILE = path.join(app.getPath('userData'), 'waifu-debug.log'); } catch { try { LOG_FILE = path.join(process.env.HOME || '/tmp', '.waifu-desktop-debug.log'); } catch { LOG_FILE = '/tmp/waifu-desktop-debug.log'; } }
@@ -120,7 +134,7 @@ async function startBackend() {
   return startBackendOn(8000);
 }
 async function startBackendOn(port){
-  const backendDir = path.resolve(__dirname, '../../..', 'backend');
+  const backendDir = BACKEND_DIR;
   const candidates = [
     path.join(backendDir, '.venv/bin/python'),
     '/tmp/waifu-venv/bin/python',
@@ -142,9 +156,12 @@ async function startBackendOn(port){
     }catch(e){ console.warn('[backend] auto-bootstrap failed', e.message); }
     if(!py) py = 'python3';
   }
-  tlog(`[backend] spawning ${py} -m uvicorn app.main:app --host 127.0.0.1 --port ${port} --app-dir ${backendDir} (cwd=${backendDir})`);
+  tlog(`[backend] spawning ${py} -m uvicorn app.main:app --host 127.0.0.1 --port ${port} --app-dir ${backendDir} (cwd=${backendDir}) RIKO_ROOT=${RES_ROOT} CONTENT=${CONTENT_DIR||'(repo)'}`);
   try {
-    backendProc = spawn(py, ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(port), '--app-dir', backendDir], { cwd: backendDir, stdio: 'inherit' });
+    backendProc = spawn(py, ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', String(port), '--app-dir', backendDir], {
+      cwd: backendDir, stdio: 'inherit',
+      env: { ...process.env, RIKO_ROOT: RES_ROOT, ...(CONTENT_DIR ? { RIKO_CONTENT_DIR: CONTENT_DIR } : {}) },
+    });
     tlog(`[backend] spawned pid=${backendProc.pid||'unknown'} on :${port}`);
     backendProc.on('error', e => terr('[backend] spawn error', e.message, e.stack||''));
     backendProc.on('exit', (code, sig)=>{ tlog(`[backend] exited code=${code} sig=${sig} — port ${port}`); if(code && code!==0 && code!==null) terr(`[backend] exited ${code} sig=${sig} — port ${port} may still be busy`); });
@@ -161,7 +178,7 @@ async function createWindow() {
   win = new BrowserWindow({
     ...init,
     minWidth: 360, minHeight: 380,
-    title: 'Waifu MMD — Desktop',
+    title: 'Compangine',
     icon: path.join(__dirname, '../public/favicon.svg'),
     webPreferences: {
       preload: path.join(__dirname, fs.existsSync(path.join(__dirname, 'preload.cjs')) ? 'preload.cjs' : 'preload.js'),
@@ -227,7 +244,7 @@ async function createWindow() {
   }catch{}
 
   const devUrl = process.env.VITE_DEV_SERVER_URL || 'http://localhost:5173';
-  const fallbackDir = path.resolve(__dirname, '../../..', 'waifu-viewer/dist');
+  const fallbackDir = WEB_DIR;
   const fallbackIndex = path.join(fallbackDir, 'index.html');
   let fallbackServer = null;
   const MIME = { '.html':'text/html','.js':'text/javascript','.mjs':'text/javascript','.css':'text/css','.svg':'image/svg+xml','.png':'image/png','.jpg':'image/jpeg','.jpeg':'image/jpeg','.webp':'image/webp','.json':'application/json','.wasm':'application/wasm','.woff':'font/woff','.woff2':'font/woff2','.ttf':'font/ttf','.pmx':'application/octet-stream','.pmd':'application/octet-stream','.vmd':'application/octet-stream','.tga':'image/x-tga','.spa':'application/octet-stream','.sph':'application/octet-stream','.bmp':'image/bmp','.fbx':'application/octet-stream','.glb':'model/gltf-binary','.gltf':'model/gltf+json','.obj':'text/plain','.hdr':'application/octet-stream','.exr':'application/octet-stream','.gif':'image/gif' };
@@ -245,7 +262,7 @@ async function createWindow() {
     const port = await getFreePort() || 3123;
     // helper: list backgrounds from dist/backgrounds (and fallback to project backgrounds/) for offline fallback
     function listLocalBackgrounds(){
-      const roots = [path.join(fallbackDir, 'backgrounds'), path.resolve(__dirname, '../../..', 'backgrounds')]
+      const roots = [path.join(fallbackDir, 'backgrounds'), ...(CONTENT_DIR ? [path.join(CONTENT_DIR, 'backgrounds')] : []), path.resolve(__dirname, '../../..', 'backgrounds')]
       const IMAGE_EXTS = new Set(['.jpg','.jpeg','.png','.webp','.bmp','.gif','.hdr','.exr'])
       const MODEL_EXTS = new Set(['.fbx','.glb','.gltf','.obj','.pmx','.pmd'])
       const out = []; const seen = new Set(); const modelMap = new Map(); const modelTops = new Set()
@@ -332,7 +349,7 @@ async function createWindow() {
             const low=fname.toLowerCase()
             if(low.endsWith('.jpg')) alts.push(fname.slice(0,-4)+'.jpeg')
             else if(low.endsWith('.jpeg')) alts.push(fname.slice(0,-5)+'.jpg')
-            const bases=[path.join(fallbackDir,'backgrounds'), path.resolve(__dirname,'../../..','backgrounds'), path.resolve(__dirname,'../../..','waifu-viewer/public/backgrounds')]
+            const bases=[path.join(fallbackDir,'backgrounds'), ...(CONTENT_DIR ? [path.join(CONTENT_DIR,'backgrounds')] : []), path.resolve(__dirname,'../../..','backgrounds'), path.resolve(__dirname,'../../..','waifu-viewer/public/backgrounds')]
             for(const base of bases){
               for(const q of alts){
                 for(const probe of [path.join(base,'Cozy-Living-Room','textures',q), path.join(base,'textures',q), path.join(base,q)]){
@@ -356,7 +373,7 @@ async function createWindow() {
             }
             return null
           }
-          const candidates = [path.join(fallbackDir,'backgrounds',rel), path.resolve(__dirname,'../../..','backgrounds',rel), path.resolve(__dirname,'../../..','waifu-viewer/public/backgrounds',rel)]
+          const candidates = [path.join(fallbackDir,'backgrounds',rel), ...(CONTENT_DIR ? [path.join(CONTENT_DIR,'backgrounds',rel)] : []), path.resolve(__dirname,'../../..','backgrounds',rel), path.resolve(__dirname,'../../..','waifu-viewer/public/backgrounds',rel)]
           let found = candidates.find(p=>{ try{ return fs.existsSync(p)&&fs.statSync(p).isFile() }catch{return false} })
           // tolerant direct texture alternate ext
           if(!found && rel.toLowerCase().includes('textures')){
@@ -427,9 +444,10 @@ async function createWindow() {
             }catch{
               try{
                 const candidates = [
+                  path.join(RES_ROOT, 'version.json'),
+                  path.join(fallbackDir, 'version.json'),
                   path.resolve(__dirname, '../../..', 'version.json'),
                   path.resolve(__dirname, '../../..', 'waifu-viewer/public/version.json'),
-                  path.join(fallbackDir, 'version.json')
                 ];
                 for(const p of candidates){
                   if(fs.existsSync(p) && fs.statSync(p).isFile()){
@@ -437,8 +455,10 @@ async function createWindow() {
                     fs.createReadStream(p).pipe(res); return;
                   }
                 }
-                // fallback generate minimal
-                const j = { version: 'EU-0.3.9-01', build:0, commit:'unknown', branch:'unknown', dirty:false, buildTime: new Date().toISOString() };
+                // fallback generate minimal (prefer the shipped VERSION file)
+                let fallbackVer = 'EU-0.5.0-01';
+                try{ const vf = path.join(RES_ROOT, 'VERSION'); if(fs.existsSync(vf)) fallbackVer = fs.readFileSync(vf, 'utf8').trim().split(/\s+/)[0] || fallbackVer; }catch{}
+                const j = { version: fallbackVer, build:0, commit:'unknown', branch:'unknown', dirty:false, buildTime: new Date().toISOString() };
                 res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'});
                 res.end(JSON.stringify(j)); return;
               }catch(e){ res.writeHead(500); res.end(String(e.message||e)); }
@@ -475,6 +495,32 @@ async function createWindow() {
             }catch{ res.writeHead(502); res.end('backend not reachable'); }
           })();
           return;
+        }
+        // /models/* — slim dist has no models; serve user content, then backend (content packs)
+        if(pathname.startsWith('/models/')){
+          const rel = pathname.slice('/models/'.length)
+          if(rel.includes('..') || rel.includes('\0')){ res.writeHead(400); res.end('bad path'); return }
+          const direct = [path.join(fallbackDir,'models',rel), ...(CONTENT_DIR ? [path.join(CONTENT_DIR,'models',rel)] : [])]
+          let found = direct.find(p=>{ try{ return fs.existsSync(p)&&fs.statSync(p).isFile() }catch{return false} })
+          if(found){
+            const ext=path.extname(found).toLowerCase()
+            res.writeHead(200, {'Content-Type':MIME[ext]||'application/octet-stream','Cache-Control':'no-store','Access-Control-Allow-Origin':'*'})
+            fs.createReadStream(found).pipe(res)
+            return
+          }
+          // backend hop (backend probes content dir + repo layout)
+          {
+            const target = `http://127.0.0.1:${process.env.BACKEND_PORT || 8000}/models/${rel.split('/').map(encodeURIComponent).join('/')}`
+            try{
+              const r = await fetch(target)
+              if(r.ok){
+                const buf = Buffer.from(await r.arrayBuffer())
+                res.writeHead(200, {'Content-Type': r.headers.get('content-type') || 'application/octet-stream', 'Cache-Control':'no-store','Access-Control-Allow-Origin':'*'})
+                res.end(buf); return
+              }
+            }catch{}
+          }
+          // fall through to the static section below (404 for /models/*)
         }
         if(pathname === '/') pathname = '/index.html';
         // prevent traversal

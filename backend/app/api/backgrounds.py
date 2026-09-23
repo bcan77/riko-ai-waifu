@@ -1,12 +1,21 @@
 from fastapi import APIRouter
 from pathlib import Path
 from urllib.parse import quote
+from app.paths import repo_root, pack_candidates
 
 router = APIRouter()
 
-ROOT = Path(__file__).resolve().parent.parent.parent.parent  # project root
+ROOT = repo_root()  # project root (or packaged resources via RIKO_ROOT)
 BG_SRC = ROOT / "backgrounds"
 PUBLIC_BG = ROOT / "waifu-viewer" / "public" / "backgrounds"
+
+def _bg_bases():
+    """Probe order: user content dir first, then repo layout."""
+    bases = pack_candidates("backgrounds", "backgrounds")
+    for extra in (PUBLIC_BG,):
+        if extra not in bases:
+            bases.append(extra)
+    return bases
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".hdr", ".exr"}
 MODEL_EXTS = {".fbx", ".glb", ".gltf", ".obj", ".pmx", ".pmd"}
@@ -19,7 +28,7 @@ def list_backgrounds():
     model_map = {}  # id -> { file: rel, ext: str }
     model_tops = set()  # top folders that contain a model
 
-    for base in [BG_SRC, PUBLIC_BG]:
+    for base in _bg_bases():
         if not base.exists():
             continue
         for p in base.rglob("*"):
@@ -60,7 +69,7 @@ def list_backgrounds():
         })
 
     # Image entries — skip any image inside a model top folder
-    for base in [BG_SRC, PUBLIC_BG]:
+    for base in _bg_bases():
         if not base.exists():
             continue
         for p in base.rglob("*"):

@@ -5,7 +5,7 @@
 > Interactive MMD waifu (Ellen / Jane / Zhu) with real-time AI chat, lip-synced TTS and physics.  
 > **Stack:** Three.js + MMDLoader + Bullet (`ammo.js`) · FastAPI + WebSockets · OpenRouter/Groq · Kokoro/ElevenLabs · 60fps viseme
 
-![Version](https://img.shields.io/badge/version-EU--0.4.0--01-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-3.11+-yellow) ![License](https://img.shields.io/badge/license-private-lightgrey)
+![Version](https://img.shields.io/badge/version-EU--0.5.0--01-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-3.11+-yellow) ![License](https://img.shields.io/badge/license-private-lightgrey)
 
 **Live:** Frontend `http://localhost:5173` proxies `/health` `/api/*` `/ws` → Backend `http://localhost:8000` via `waifu-viewer/vite.config.js:388`.
 
@@ -22,6 +22,8 @@
 - **Benchmark** — one-click PC test (setup step + Settings → App): CPU/GPU stress, RAM, WebGL2/3D-room support, TTS + backend; auto-tunes DPR/shadows/fps cap (`waifu-viewer/src/services/benchmark.js`)
 - **Extensions** — optional add-ons loaded on demand via dynamic import (registry `waifu-viewer/public/extensions.json`, local for testing). Mature (18+) packages stay blurred unless enabled (Settings → Extensions)
 - **Simple / Dev modes** — clean end-user UI by default; 🛠 Developer mode unlocks physics gravity, light fine-tune, camera damping and debug tools
+- **Modular engine + content packs** — the app ships slim (no bundled models); characters/models/3D-rooms install on demand from the GitHub release via **Settings → Extensions → Content packs** (`content/packs.json`, `backend/app/api/content.py`)
+- **Desktop releases** — compiled Linux (AppImage/deb) and Windows (NSIS) builds published as GitHub release tags; content + add-ons pull from the repo
 - **Desktop** — Electron wrapper `apps/desktop/electron/main.js` auto-spawns `uvicorn` (health-checks `:8000` → `:8001`)
 - **Backgrounds / VMD live-sync** — Vite plugins `vmdLiveSync()` + `backgroundsLiveSync()` serve `/api/vmd`, `/api/backgrounds`, `/backgrounds/*` with watch + HMR
 
@@ -118,17 +120,18 @@ Frontend stores affinity, graphics, and keys in `localStorage` (`waifu:affinity`
 ## Project Structure
 
 ```
-waifu-viewer/         Vite + Three/MMD (src/main.js, services/{waifu-client,morph-driver,tools,benchmark,extensions,i18n}, settings/, editor/WpkgEditor as on-demand add-on)
-backend/app/          FastAPI (main.py, api/{health,chat,wpkg,memory,keys,settings,backgrounds,version}, ws/talk.py, services/{llm,tts,viseme,memory/stt}, config.py, models/schemas.py)
+waifu-viewer/         Vite + Three/MMD (src/main.js, services/{waifu-client,morph-driver,tools,benchmark,extensions,content,i18n}, settings/, editor/WpkgEditor as on-demand add-on)
+backend/app/          FastAPI (main.py, api/{health,chat,wpkg,memory,keys,settings,backgrounds,version,content}, ws/talk.py, services/{llm,tts,viseme,memory/stt}, config.py, models/schemas.py, paths.py)
 packages/wpkg/        .wpkg pack/unpack + ratings/tags validation (src/index.js, src/manifest.js, jszip STORE, 200MB limit, path-traversal guard)
-apps/desktop/         Electron (electron/main.js auto-starts uvicorn, preload.js bridge)
+apps/desktop/         Electron (electron/main.js auto-starts uvicorn, preload.js bridge; electron-builder linux/win releases)
+content/packs.json    Content-pack manifest (characters/models/backgrounds → GitHub release zips)
 characters/*.wpkg     Built bundles (174 MB)
 waifu-viewer/public/models/  Legacy PMX for direct boot (164 MB, mirrors characters)
 waifu-viewer/public/extensions.json  Add-on registry (local file for testing)
 backgrounds/          3D rooms + textures
 VMD_Animations/       Live VMD source (default_pose.vmd etc.)
-scripts/              pack-wpkg.mjs, convert-to-wpkg.mjs, version.mjs, watch-rebuild.mjs
-VERSION / version.json  App version (EU-0.4.0-01) synced to public/version.json + /api/version
+scripts/              pack-wpkg.mjs, convert-to-wpkg.mjs, version.mjs, watch-rebuild.mjs, build-frontend.mjs (slim dist), build-content-packs.mjs
+VERSION / version.json  App version (EU-0.5.0-01) synced to public/version.json + /api/version
 ```
 
 ---

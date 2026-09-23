@@ -2,11 +2,31 @@ from fastapi import APIRouter, UploadFile, File, HTTPException
 from fastapi.responses import JSONResponse
 import os, json, shutil, tempfile, pathlib
 from app.config import settings
+from app.paths import pack_candidates, pack_target, first_existing
 
 router = APIRouter(prefix="/api/wpkg")
-WPKG_DIR = pathlib.Path(__file__).resolve().parents[3] / "characters"
+
+def _chars_dirs():
+    """Probe order: user content dir first, repo layout second."""
+    return pack_candidates("characters", "characters")
+
+def _chars_dir():
+    """Existing characters dir for reads (falls back to empty target)."""
+    return first_existing(_chars_dirs()) or pack_target("characters", "characters")
+
+def _chars_target():
+    """Write target for uploads/creates."""
+    ex = first_existing(_chars_dirs())
+    if ex:
+        return ex
+    t = pack_target("characters", "characters")
+    t.mkdir(parents=True, exist_ok=True)
+    return t
+
+WPKG_DIR = _chars_dir()  # compat alias (re-resolved per request below)
 
 def _list_wpkg():
+    WPKG_DIR = _chars_dir()
     WPKG_DIR.mkdir(exist_ok=True)
     out=[]
     for p in WPKG_DIR.glob("*.wpkg"):
@@ -32,6 +52,7 @@ async def wpkg_list():
 @router.get("/info")
 async def wpkg_info(file: str):
     # unpack to tmp and read manifest
+    WPKG_DIR = _chars_dir()
     target = (WPKG_DIR / file).resolve()
     if not str(target).startswith(str(WPKG_DIR.resolve())): raise HTTPException(400,"bad file")
     if not target.exists(): raise HTTPException(404,"not found")
@@ -106,6 +127,7 @@ async def wpkg_validate(payload: dict):
 
 @router.post("/upload")
 async def wpkg_upload(file: UploadFile = File(...)):
+    WPKG_DIR = _chars_target()
     WPKG_DIR.mkdir(exist_ok=True)
     if not file.filename.endswith(".wpkg"): raise HTTPException(400,"must be .wpkg")
     dest = WPKG_DIR / file.filename
@@ -132,6 +154,7 @@ async def wpkg_create(payload: dict):
     import zipfile, io
     pid = payload.get("id","my_waifu")
     if not pid.replace("_","").replace("-","").isalnum(): raise HTTPException(400,"bad id")
+    WPKG_DIR = _chars_target()
     WPKG_DIR.mkdir(exist_ok=True)
     out_path = WPKG_DIR / f"{pid}.wpkg"
     existing_tmp = None

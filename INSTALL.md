@@ -4,6 +4,14 @@
 
 Windows / Linux / macOS için adım adım. **Node ≥18** ve **Python 3.11+** gerektirir.
 
+## 0) Kolay yol — derlenmiş sürüm (kullanıcılar için önerilir)
+
+1. İşletim sistemine uygun sürümü `GitHub → Releases` altından indir (`Compangine-*-x86_64.AppImage` / `.deb` / `Compangine-*-Setup.exe`).
+2. Yoksa **Python 3.11+** kur — ilk açılışta backend venv’i otomatik kurulur ve Python bağımlılıkları iner (bir kez internet gerekir).
+3. Aç → panel → **Ayarlar → Eklentiler → İçerik paketleri** → Karakterler / Modeller / 3D odaları kur (aynı sürümden iner). Motor bilerek sade gelir.
+
+Aşağısı geliştiriciler için kaynaktan kurulum.
+
 ## 1) Ön Koşullar
 
 ```bash

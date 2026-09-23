@@ -4,6 +4,14 @@
 
 Step-by-step for Windows / Linux / macOS. Requires **Node ≥18** and **Python 3.11+**.
 
+## 0) Easy way — compiled release (recommended for users)
+
+1. Download the release for your OS from `GitHub → Releases` (`Compangine-*-x86_64.AppImage` / `.deb` / `Compangine-*-Setup.exe`).
+2. Install **Python 3.11+** if missing — first launch auto-creates the backend venv and installs Python deps (needs internet once).
+3. Launch → dashboard → **Settings → Extensions → Content packs** → install Characters / Models / 3D rooms (downloaded from the same release). The engine itself is slim on purpose.
+
+Below is the from-source path for developers.
+
 ## 1) Prerequisites
 
 ```bash

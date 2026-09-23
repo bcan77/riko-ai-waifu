@@ -1,9 +1,66 @@
 {
   "name": "@waifu/desktop",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "type": "module",
   "main": "electron/main.js",
+  "build": {
+    "appId": "com.bcan77.compangine",
+    "productName": "Compangine",
+    "files": [
+      "electron/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../../waifu-viewer/dist",
+        "to": "web"
+      },
+      {
+        "from": "../../backend/app",
+        "to": "backend/app"
+      },
+      {
+        "from": "../../backend/requirements.txt",
+        "to": "backend/requirements.txt"
+      },
+      {
+        "from": "../../content/packs.json",
+        "to": "content/packs.json"
+      },
+      {
+        "from": "../../VERSION",
+        "to": "VERSION"
+      },
+      {
+        "from": "../../version.json",
+        "to": "version.json"
+      }
+    ],
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Game"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true
+    },
+    "publish": {
+      "provider": "github",
+      "owner": "bcan77",
+      "repo": "riko-ai-waifu"
+    }
+  },
   "scripts": {
     "dev": "concurrently --kill-others --names vite,electron \"npx vite --config vite.config.js\" \"wait-on http://127.0.0.1:5173 --timeout 30000 && electron .\"",
     "dev:vite": "npx vite --config vite.config.js",

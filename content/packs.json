@@ -1,0 +1,25 @@
+{
+  "packs": [
+    {
+      "id": "characters",
+      "asset": "characters-pack.zip",
+      "repo_dir": "characters",
+      "size_mb": 174,
+      "version": "0.5.0"
+    },
+    {
+      "id": "models",
+      "asset": "models-pack.zip",
+      "repo_dir": "waifu-viewer/public/models",
+      "size_mb": 164,
+      "version": "0.5.0"
+    },
+    {
+      "id": "backgrounds",
+      "asset": "backgrounds-pack.zip",
+      "repo_dir": "backgrounds",
+      "size_mb": 51,
+      "version": "0.5.0"
+    }
+  ]
+}

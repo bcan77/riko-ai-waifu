@@ -1805,6 +1805,18 @@ async function renderBgGrid(){
 }
 renderBgGrid()
 
+// content packs installed/removed at runtime — rescan libraries + dashboard
+addEventListener('content:changed', async ()=>{
+  bgListCache = []
+  try{ await fetchVmdList(); buildAnimList() }catch{}
+  try{ renderBgGrid() }catch{}
+  if(document.body.dataset.screen === 'dashboard'){
+    try{ await refreshDashboard() }catch{}
+  } else {
+    toast('Content updated — libraries rescanned ♡', 2200)
+  }
+})
+
 // ── Full Debug — Camera + Model + Background (auto-save + Save button) ──
 function mountBgDebug(){
   const root = document.getElementById('bgDebug')
@@ -2022,7 +2034,16 @@ async function refreshDashboard(){
     const bEl = document.getElementById('dashBg')
     if(bEl){
       const rooms = bgListCache.filter(b => b.type === 'model').length
-      bEl.textContent = t('dash.bgs', { n: bgListCache.length }) + (rooms ? t('dash.rooms', { n: rooms }) : '')
+      let txt = t('dash.bgs', { n: bgListCache.length }) + (rooms ? t('dash.rooms', { n: rooms }) : '')
+      try{
+        const pr = await fetch('/api/content/packs', { cache: 'no-store' })
+        if(pr.ok){
+          const pj = await pr.json()
+          const missing = (pj.packs || []).filter(p => !p.installed).length
+          if(missing) txt += t('dash.packsMissing', { n: missing })
+        }
+      }catch{}
+      bEl.textContent = txt
     }
   }catch{}
   try{

@@ -7,6 +7,7 @@ import { DEFAULTS, get, set, reset, exportJson, importJson, onChange, LIGHTING_P
 import { fetchBackgrounds as fetchBgList } from '../services/background-manager.js'
 import { runBenchmark, applyRecommended, describeResult } from '../services/benchmark.js'
 import { fetchRegistry, isInstalled as isExtInstalled, installExtension, uninstallExtension } from '../services/extensions.js'
+import { fetchPacks, installAndWait, removePack, notifyContentChanged } from '../services/content.js'
 import { t } from '../services/i18n.js'
 
 const FREE_MODELS = [
@@ -322,6 +323,11 @@ export function mountSettingsModal(opts = {}){
               <div id="setExtList"><div class="settings-hint" style="margin:0">${t('ext.loading')}</div></div>
               <div class="settings-hint">${t('ext.registry')}</div>
             </div>
+            <div class="settings-card" style="margin-top:10px">
+              <h4>${t('content.title')}</h4>
+              <div id="setContentList"><div class="settings-hint" style="margin:0">${t('ext.loading')}</div></div>
+              <div class="settings-hint">${t('content.hint')}</div>
+            </div>
           </div>
 
           <div class="settings-panel ${activeTab==='app'?'active':''}" data-panel="app">
@@ -381,6 +387,76 @@ export function mountSettingsModal(opts = {}){
     syncAppTab()
     renderSettingsBg()
     renderExtensions()
+    renderContent()
+  }
+
+  async function renderContent(){
+    const host = root.querySelector('#setContentList')
+    if(!host) return
+    let data = null
+    try{ data = await fetchPacks() }catch{
+      host.innerHTML = `<div class="settings-hint" style="margin:0">${t('content.offline')}</div>`
+      return
+    }
+    const packs = data.packs || []
+    host.innerHTML = packs.map(p=>{
+      const name = t('content.pack.' + p.id + '.name') || p.id
+      return `<div class="ext-row" data-pack="${p.id}">
+        <div class="ext-meta"><b>${name}</b><span>${t('content.pack.' + p.id + '.desc')} • ${p.size_mb} MB${p.installed ? ` • ${t('content.installed', { mb: p.installed_mb })}${p.managed ? '' : ` (${t('content.repo')})`}` : ''}</span>
+        <div class="setup-progress-bar" data-prog style="display:none;margin-top:6px"><i style="width:0%"></i></div>
+        <div class="settings-hint" data-msg style="display:none;margin:6px 0 0"></div></div>
+        <span class="ext-ver">v${p.version || '?'}</span>
+        ${p.installed
+          ? (p.managed ? `<button class="btn small ghost" data-pack-remove="${p.id}">${t('content.remove')}</button>` : '')
+          : `<button class="btn small primary" data-pack-install="${p.id}">${t('content.install')} · ${p.size_mb}MB</button>`}
+      </div>`
+    }).join('')
+    const row = (id) => host.querySelector(`[data-pack="${id}"]`)
+    const setProg = (id, frac, label) => {
+      const r = row(id); if(!r) return
+      const bar = r.querySelector('[data-prog]')
+      const msg = r.querySelector('[data-msg]')
+      if(bar){ bar.style.display = ''; const i = bar.querySelector('i'); if(i) i.style.width = Math.round(frac * 100) + '%' }
+      if(msg && label){ msg.style.display = ''; msg.textContent = label }
+    }
+    host.querySelectorAll('[data-pack-install]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.dataset.packInstall
+        btn.disabled = true
+        try{
+          const st = await installAndWait(id, (s)=>{
+            if(s.state === 'downloading') setProg(id, s.progress || 0, t('content.downloading', { p: Math.round((s.progress || 0) * 100) }))
+            else if(s.state === 'extracting') setProg(id, 0.85, t('content.extracting'))
+          })
+          if(st.state === 'done'){
+            setProg(id, 1, t('content.done'))
+            notifyContentChanged()
+            onAction({type:'toast', text: t('content.done')})
+            setTimeout(renderContent, 900)
+          } else {
+            throw new Error(st.error || st.state)
+          }
+        }catch(err){
+          setProg(id, 0, t('ext.failed', { e: err?.message || err }))
+          btn.disabled = false
+        }
+      })
+    })
+    host.querySelectorAll('[data-pack-remove]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.dataset.packRemove
+        if(!confirm(t('content.remove') + ' ' + id + '?')) return
+        btn.disabled = true
+        try{
+          await removePack(id)
+          notifyContentChanged()
+          renderContent()
+        }catch(err){
+          onAction({type:'toast', text: t('ext.failed', { e: err?.message || err })})
+          btn.disabled = false
+        }
+      })
+    })
   }
 
   async function renderExtensions(){
@@ -653,7 +729,7 @@ export function mountSettingsModal(opts = {}){
         if(activeTab==='app') syncAppTab()
         if(activeTab==='keys') syncKeysTab()
         if(activeTab==='graphics') renderSettingsBg()
-        if(activeTab==='extensions') renderExtensions()
+        if(activeTab==='extensions'){ renderExtensions(); renderContent() }
       })
     })
     // keyboard nav for tabs

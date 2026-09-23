@@ -422,6 +422,8 @@ function backgroundsLiveSync() {
       try { fs.watch(BG_SRC, { persistent:false, recursive:true }, ()=> notify()) } catch { try{ fs.watch(BG_SRC,{persistent:false},()=>notify())}catch{}}
     },
     closeBundle() {
+      // Slim release builds skip the 51MB backgrounds copy — rooms install as a content pack.
+      if (process.env.RIKO_SLIM_BUILD) { console.log('[backgrounds] slim build — skipping dist copy'); return }
       if (!fs.existsSync(BG_SRC)) return
       const distBg = path.resolve(process.cwd(), 'dist/backgrounds')
       try {
