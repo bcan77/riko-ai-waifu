@@ -161,6 +161,10 @@ const STR = {
     'cv.nodes': '{n} nodes',
     'cv.openMesh': 'Open mesh →',
     'dash.cloudMeta': '{n} nodes in the mesh',
+    // navigation
+    'nav.dashboard': 'Dashboard',
+    'nav.stage': 'Stage',
+    'nav.cloud': 'Neural Cloud',
   },
   tr: {
     // dashboard
@@ -318,6 +322,10 @@ const STR = {
     'cv.nodes': '{n} düğüm',
     'cv.openMesh': 'Ağı aç →',
     'dash.cloudMeta': 'ağda {n} düğüm',
+    // navigation
+    'nav.dashboard': 'Panel',
+    'nav.stage': 'Sahne',
+    'nav.cloud': 'Neural Cloud',
   },
 }
 

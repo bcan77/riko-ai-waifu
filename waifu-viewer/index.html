@@ -17,6 +17,7 @@
         <button id="btnPanel" class="btn ghost small" style="padding:4px 8px" title="Menu (P)">☰</button>
         <span class="logo-mark">◉</span>
         <span class="logo-text">COMPAN<span>GINE</span></span>
+        <span id="screenLabel" class="screen-label">Dashboard</span>
       </div>
       <div class="topbar-right">
         <button id="btnDash" class="btn ghost small" title="Back to dashboard">⌂</button>
@@ -54,13 +55,13 @@
             <div class="dash-meta" id="dashBg">— backgrounds</div>
             <button class="btn small dash-link" id="btnDashWpkg">◨ WPKG packages →</button>
           </div>
-          <div class="dash-card">
+          <div class="dash-card" id="dashCardBrain">
             <div class="dash-card-top"><span class="dash-ico">💬</span><span class="dash-label" id="dashLabelBrain">Brain &amp; Voice</span></div>
             <div class="dash-big" id="dashBackend">…</div>
             <div class="dash-meta" id="dashProviders">checking backend…</div>
             <button class="btn small dash-link" id="btnDashKeys">🔑 API keys →</button>
           </div>
-          <div class="dash-card">
+          <div class="dash-card" id="dashCardPerf">
             <div class="dash-card-top"><span class="dash-ico">⚡</span><span class="dash-label" id="dashLabelPerf">Performance</span></div>
             <div class="dash-big" id="dashBench">Not tested</div>
             <div class="dash-meta" id="dashBenchMeta">run a benchmark to tune quality</div>

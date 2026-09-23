@@ -1974,6 +1974,8 @@ let bootPromise = null
 function setScreen(name){
   const next = name === 'stage' ? 'stage' : name === 'cloud' ? 'cloud' : 'dashboard'
   document.body.dataset.screen = next
+  const pill = document.getElementById('screenLabel')
+  if(pill) pill.textContent = t(next === 'stage' ? 'nav.stage' : next === 'cloud' ? 'nav.cloud' : 'nav.dashboard')
   if(next === 'dashboard') refreshDashboard()
   if(next === 'cloud' && window.__cloudRefresh){
     try{ window.__cloudRefresh() }catch{}
@@ -2112,6 +2114,30 @@ function initDashboard(){
   document.getElementById('btnCloud')?.addEventListener('click', ()=> setScreen('cloud'))
   document.getElementById('btnDashCloud')?.addEventListener('click', ()=> setScreen('cloud'))
   try{ initCloudView({ toast }) }catch(e){ console.warn('cloud view init failed', e) }
+  // whole dashboard cards are clickable (buttons still work; ignore clicks on them to avoid double-fire)
+  const goCard = (id, fn)=>{
+    const c = document.getElementById(id)
+    if(!c) return
+    c.setAttribute('data-go', '1')
+    c.addEventListener('click', (e)=>{ if(e.target.closest('button')) return; fn() })
+  }
+  goCard('dashCardStage', ()=> enterStage())
+  goCard('dashCardBrain', ()=> settingsModal?.open('keys'))
+  goCard('dashCardPerf', ()=> settingsModal?.open('app'))
+  try{
+    const banner = document.querySelector('.dash-banner')
+    if(banner){
+      banner.setAttribute('data-go', '1')
+      banner.addEventListener('click', (e)=>{ if(e.target.closest('button')) return; setScreen('cloud') })
+    }
+  }catch{}
+  // Esc on the cloud realm goes home (settings modal keeps its own Esc)
+  addEventListener('keydown', (e)=>{
+    if(e.key !== 'Escape') return
+    if(document.body.dataset.screen !== 'cloud') return
+    try{ if(settingsModal?.isOpen()) return }catch{}
+    setScreen('dashboard')
+  })
   // initial paint
   setScreen('dashboard')
 }

@@ -316,11 +316,11 @@ export function mountSettingsModal(opts = {}){
             <h3>${t('cloud.title')}</h3>
             <div class="settings-card">
               <h4>${t('cloud.upload')}</h4>
-              <div class="settings-row"><label>${t('cloud.pick')}
-                <span style="display:flex;gap:6px">
-                  <input type="file" id="cloudFileInput" accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.markdown,.csv,.json,.log,.pdf" style="flex:1">
+              <div class="settings-row"><label for="cloudFileInput">${t('cloud.pick')}</label>
+                <div class="row" style="margin-top:0">
+                  <input type="file" id="cloudFileInput" accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.markdown,.csv,.json,.log,.pdf" style="flex:1;min-width:0">
                   <button class="btn small primary" data-act="cloud-upload">${t('cloud.send')}</button>
-                </span></label>
+                </div>
               </div>
               <div class="settings-hint" style="margin:0" id="cloudUploadStatus">${t('cloud.formats')}</div>
             </div>
@@ -920,12 +920,11 @@ export function mountSettingsModal(opts = {}){
     root.querySelector('[data-act="reset-camera"]')?.addEventListener('click', ()=> onAction({type:'resetCamera'}))
     root.querySelector('[data-act="check-health"]')?.addEventListener('click', ()=> syncAppTab())
     root.querySelector('[data-act="bench-run"]')?.addEventListener('click', runSettingsBenchmark)
-    root.querySelector('[data-act="cloud-upload"]')?.addEventListener('click', async ()=>{
+    async function uploadCloudFile(f){
       const inp = root.querySelector('#cloudFileInput')
       const st = root.querySelector('#cloudUploadStatus')
-      const f = inp?.files?.[0]
-      if(!f){ if(st) st.textContent = t('cloud.pickFirst'); return }
       const btn = root.querySelector('[data-act="cloud-upload"]')
+      if(!f) return
       if(btn) btn.disabled = true
       if(st) st.textContent = t('cloud.uploading', { n: f.name })
       try{
@@ -942,12 +941,24 @@ export function mountSettingsModal(opts = {}){
         }
         if(inp) inp.value = ''
         renderCloud()
+        try{ window.__cloudRefresh?.() }catch{}
         onAction({type:'toast', text: t('cloud.uploaded')})
       }catch(err){
         if(st) st.textContent = t('ext.failed', { e: err?.message || err })
-        if(btn) btn.disabled = false
       }
       if(btn) btn.disabled = false
+    }
+    // picking a file uploads immediately; the button uploads the selection
+    // (or opens the picker when empty) — never nested in the <label>.
+    root.querySelector('#cloudFileInput')?.addEventListener('change', (e)=>{
+      const f = e.target.files?.[0]
+      if(f) uploadCloudFile(f)
+    })
+    root.querySelector('[data-act="cloud-upload"]')?.addEventListener('click', ()=>{
+      const inp = root.querySelector('#cloudFileInput')
+      const f = inp?.files?.[0]
+      if(f) uploadCloudFile(f)
+      else if(inp) inp.click()
     })
     root.querySelector('[data-act="check-keys"]')?.addEventListener('click', ()=> syncKeysTab())
     root.querySelector('[data-act="save-keys"]')?.addEventListener('click', ()=> saveKeysToBackend())

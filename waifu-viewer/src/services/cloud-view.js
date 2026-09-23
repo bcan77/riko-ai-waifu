@@ -215,6 +215,27 @@ export async function refreshCloudView(){
 
 function esc(s){ return String(s ?? '').replace(/</g, '&lt;') }
 
+function trackMouse(cx, cy){
+  const r = (typeof svg !== 'undefined' && svg) ? svg.getBoundingClientRect() : { left: 0, top: 0 }
+  mouse.x = cx - r.left; mouse.y = cy - r.top
+}
+
+async function uploadFiles(list){
+  const f = list?.[0]
+  if(!f) return
+  try{
+    const fd = new FormData()
+    fd.append('file', f)
+    toastFn(t('cloud.uploading', { n: f.name }))
+    const r = await fetch('/api/cloud/upload', { method: 'POST', body: fd })
+    const j = await r.json().catch(() => ({}))
+    if(!r.ok) throw new Error(j.detail || ('api ' + r.status))
+    toastFn(t('cv.nodeAdded'))
+    await refreshCloudView()
+    if(j.file?.id) select(j.file.id)
+  }catch(e){ toastFn(t('ext.failed', { e: e?.message || e })) }
+}
+
 async function select(id){
   selectedId = id
   for(const n of nodes.values()) refreshNodeMeta(n)
@@ -306,8 +327,7 @@ export function initCloudView(opts = {}){
     select(null)
   })
   svg.addEventListener('pointermove', (e)=>{
-    const r = svg.getBoundingClientRect()
-    mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top
+    trackMouse(e.clientX, e.clientY)
     if(!panning) return
     view.x += e.clientX - sx; view.y += e.clientY - sy
     sx = e.clientX; sy = e.clientY
@@ -323,25 +343,24 @@ export function initCloudView(opts = {}){
   }, { passive: false })
 
   canvas.addEventListener('pointermove', (e)=>{
-    const r = canvas.getBoundingClientRect()
-    mouse.x = e.clientX - r.left; mouse.y = e.clientY - r.top
+    trackMouse(e.clientX, e.clientY)
   })
 
   uploadBtn?.addEventListener('click', ()=> fileInput?.click())
   fileInput?.addEventListener('change', async ()=>{
     const f = fileInput.files?.[0]
-    if(!f) return
-    try{
-      const fd = new FormData()
-      fd.append('file', f)
-      const r = await fetch('/api/cloud/upload', { method: 'POST', body: fd })
-      const j = await r.json().catch(() => ({}))
-      if(!r.ok) throw new Error(j.detail || ('api ' + r.status))
-      toastFn(t('cv.nodeAdded'))
-      fileInput.value = ''
-      await refreshCloudView()
-      if(j.file?.id) select(j.file.id)
-    }catch(e){ toastFn(t('ext.failed', { e: e?.message || e })) }
+    fileInput.value = ''
+    await uploadFiles(f ? [f] : [])
+  })
+  // drag & drop anywhere on the realm
+  let dropDepth = 0
+  root.addEventListener('dragenter', (e)=>{ e.preventDefault(); dropDepth++; root.classList.add('dropping') })
+  root.addEventListener('dragover', (e)=>{ e.preventDefault() })
+  root.addEventListener('dragleave', (e)=>{ e.preventDefault(); dropDepth = Math.max(0, dropDepth - 1); if(!dropDepth) root.classList.remove('dropping') })
+  root.addEventListener('drop', async (e)=>{
+    e.preventDefault(); e.stopPropagation()
+    dropDepth = 0; root.classList.remove('dropping')
+    await uploadFiles([...(e.dataTransfer?.files || [])])
   })
 
   try{ new ResizeObserver(resize).observe(root) }catch{}
