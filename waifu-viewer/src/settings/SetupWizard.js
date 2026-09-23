@@ -1,17 +1,24 @@
 /**
- * SetupWizard — macOS-style first-boot onboarding
- * Steps: 1 Language (EN/TR) • 2 API Keys • 3 Character chooser • Done
+ * SetupWizard — Compangine first-boot onboarding
+ * Steps: 1 Language (EN/TR) • 2 API Keys • 3 Character • 4 Performance (benchmark) • Done
  * Blue, translucent, sleek SF-like icons, full-screen.
  */
 import { get, set, setOnboarded } from './store.js'
+import { runBenchmark, applyRecommended, describeResult } from '../services/benchmark.js'
+import { t as tx } from '../services/i18n.js'
+
+let _benchResult = null
+let _benchRunning = false
+let _benchError = ''
 
 const I18N = {
   en: {
     welcome: 'Welcome',
-    subtitle: 'Set up your Waifu MMD in 3 quick steps',
+    subtitle: 'Set up your Compangine in 4 quick steps',
     stepLang: 'Language',
     stepKeys: 'API Keys',
     stepChar: 'Character',
+    stepPerf: 'Performance',
     langTitle: 'Choose your language',
     langDesc: 'You can change this anytime in Settings',
     langEn: 'English',
@@ -31,6 +38,13 @@ const I18N = {
     voiceEn: 'English voice',
     voiceJa: 'Japanese voice',
     premium: 'Premium TTS',
+    perfTitle: 'Test your PC',
+    perfDesc: 'A quick <b>~5 second</b> check of CPU, GPU, TTS and 3D rooms — then quality is tuned automatically.',
+    perfRun: 'Run benchmark',
+    perfRerun: 'Re-run',
+    perfRunning: 'Testing…',
+    perfApply: 'Apply recommended quality settings',
+    perfSkip: 'Skip — I’ll tune it myself',
     doneTitle: "You're all set",
     doneDesc: 'Keys (if any) are saved locally. Hit <b>Start</b> to enter — reopen setup via <b>⚙ Settings → Re-run setup</b> or <b>,</b>.',
     health: 'Backend',
@@ -42,10 +56,11 @@ const I18N = {
   },
   tr: {
     welcome: 'Hoş geldin',
-    subtitle: 'Waifu MMD’yi 3 adımda kur',
+    subtitle: 'Compangine’i 4 adımda kur',
     stepLang: 'Dil',
     stepKeys: 'API Anahtarları',
     stepChar: 'Karakter',
+    stepPerf: 'Performans',
     langTitle: 'Dilini seç',
     langDesc: 'Bunu daha sonra Ayarlar’dan değiştirebilirsin',
     langEn: 'English',
@@ -65,6 +80,13 @@ const I18N = {
     voiceEn: 'İngilizce ses',
     voiceJa: 'Japonca ses',
     premium: 'Premium TTS',
+    perfTitle: 'Bilgisayarını test et',
+    perfDesc: 'CPU, GPU, TTS ve 3D odalar için hızlı bir <b>~5 saniyelik</b> test — sonra kalite otomatik ayarlanır.',
+    perfRun: 'Testi çalıştır',
+    perfRerun: 'Tekrar çalıştır',
+    perfRunning: 'Test ediliyor…',
+    perfApply: 'Önerilen kalite ayarlarını uygula',
+    perfSkip: 'Atla — kendim ayarlarım',
     doneTitle: 'Her şey hazır',
     doneDesc: 'Anahtarlar (varsa) yerel olarak kaydedildi. <b>Başlat</b> ile gir — kurulumu <b>⚙ Ayarlar → Kurulumu tekrarla</b> veya <b>,</b> ile yeniden açabilirsin.',
     health: 'Backend',
@@ -107,8 +129,8 @@ export function mountSetupWizard(opts={}){
     root.className = 'setup-root hidden'
     document.body.appendChild(root)
   }
-  let step = 0 // 0 lang, 1 keys, 2 char, 3 done
-  const STEPS = ['lang','keys','char','done']
+  let step = 0 // 0 lang, 1 keys, 2 char, 3 perf, 4 done
+  const STEPS = ['lang','keys','char','perf','done']
 
   function shouldShow(){ try{ return !get().onboarded }catch{ return true } }
 
@@ -137,9 +159,10 @@ export function mountSetupWizard(opts={}){
       `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15 15 0 0 1 0 20a15 15 0 0 1 0-20z"/><path d="M12 2c2.5 2.8 3.9 6.2 3.9 10s-1.4 7.2-3.9 10c-2.5-2.8-3.9-6.2-3.9-10S9.5 4.8 12 2z"/></svg>`,
       `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1 0 7.78a5.5 5.5 0 0 1 0-7.78z"/><path d="M14 7l-3 3"/><path d="M5 21l4-4"/><circle cx="7.5" cy="7.5" r=".5" fill="currentColor"/></svg>`,
       `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/><path d="M12 11l2 2l4-4" stroke-width="1.4"/></svg>`,
+      `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2L3 14h7l-1 8l10-12h-7l1-8z"/></svg>`,
       `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6L9 17l-5-5"/><circle cx="12" cy="12" r="10" stroke-width="1.4" opacity=".35"/></svg>`,
     ]
-    const labels = [tr('stepLang'), tr('stepKeys'), tr('stepChar'), '✓']
+    const labels = [tr('stepLang'), tr('stepKeys'), tr('stepChar'), tr('stepPerf'), '✓']
     root.innerHTML = `
       <div class="setup-backdrop"></div>
       <div class="setup-card" role="dialog" aria-modal="true">
@@ -311,6 +334,33 @@ export function mountSetupWizard(opts={}){
               </div>
             `:''}
             ${step===3 ? `
+              <div class="setup-pane">
+                <div class="setup-pane-head">
+                  <div class="setup-icon-wrap blue"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="1.7"><path d="M13 2L3 14h7l-1 8l10-12h-7l1-8z"/></svg></div>
+                  <h2>${tr('perfTitle')}</h2>
+                  <p>${tr('perfDesc')}</p>
+                </div>
+                <div id="wizBenchBox">
+                  <div class="setup-health" style="margin-top:0">
+                    <span>⚡</span><span id="wizBenchStatus">${tr('perfRunning')}</span>
+                  </div>
+                  <div class="setup-progress" style="margin-top:10px">
+                    <div class="setup-progress-bar"><i id="wizBenchBar" style="width:2%"></i></div>
+                  </div>
+                  <div id="wizBenchResults" style="margin-top:12px"></div>
+                  <div class="setup-keys" style="margin-top:12px">
+                    <label class="setup-check">
+                      <input type="checkbox" id="wizBenchApply" checked>
+                      <span>${tr('perfApply')}</span>
+                    </label>
+                  </div>
+                  <div class="settings-actions" style="margin-top:10px">
+                    <button class="btn small ghost" data-act="bench-rerun" style="display:none">↻ ${tr('perfRerun')}</button>
+                  </div>
+                </div>
+              </div>
+            `:''}
+            ${step===4 ? `
               <div class="setup-pane center">
                 <div class="setup-icon-wrap blue large">♡</div>
                 <h2>${tr('doneTitle')}</h2>
@@ -326,13 +376,16 @@ export function mountSetupWizard(opts={}){
         <div class="setup-footer">
           <button class="btn ghost" data-act="back" ${step===0?'disabled':''}>‹ ${tr('back')}</button>
           <div class="setup-footer-right">
-            ${step<3 ? `<button class="btn primary setup-next" data-act="next">${tr('next')} ›</button>` : `<button class="btn primary setup-next" data-act="finish">${tr('finish')}</button>`}
+            ${step<4 ? `<button class="btn primary setup-next" data-act="next">${tr('next')} ›</button>` : `<button class="btn primary setup-next" data-act="finish">${tr('finish')}</button>`}
           </div>
         </div>
       </div>
     `
     bind()
     if(step===3){
+      startWizardBenchmark()
+    }
+    if(step===4){
       fetch('/health').then(r=>r.json()).then(h=>{
         const el=document.getElementById('wizHealth')
         if(el) el.textContent = h ? `ok • ${h.llm_provider}/${h.tts_provider} • o:${!!h.has_openrouter} g:${!!h.has_groq} e:${!!h.has_elevenlabs}` : 'unreachable'
@@ -340,6 +393,52 @@ export function mountSetupWizard(opts={}){
         const el=document.getElementById('wizHealth')
         if(el) el.textContent='unreachable — check backend :8000'
       })
+    }
+  }
+
+  function applyWizardBenchmark(){
+    const apply = root.querySelector('#wizBenchApply')
+    if(_benchResult && (!apply || apply.checked)){
+      applyRecommended(_benchResult)
+    }
+  }
+
+  async function startWizardBenchmark(){
+    if(_benchRunning) return
+    if(_benchResult){ paintWizardBenchmark(); return }
+    _benchRunning = true
+    _benchError = ''
+    try{
+      _benchResult = await runBenchmark((p, label)=>{
+        const bar = document.getElementById('wizBenchBar')
+        if(bar) bar.style.width = Math.round(p * 100) + '%'
+        const st = document.getElementById('wizBenchStatus')
+        if(st && label) st.textContent = label
+      })
+    }catch(e){
+      _benchError = e?.message || String(e)
+      _benchResult = null
+    }finally{
+      _benchRunning = false
+    }
+    paintWizardBenchmark()
+  }
+
+  function paintWizardBenchmark(){
+    const st = document.getElementById('wizBenchStatus')
+    const box = document.getElementById('wizBenchResults')
+    const rerun = root.querySelector('[data-act="bench-rerun"]')
+    if(rerun) rerun.style.display = ''
+    if(_benchError || !_benchResult){
+      if(st) st.textContent = 'Benchmark failed: ' + (_benchError || 'unknown') + ' — defaults kept'
+      return
+    }
+    if(st) st.textContent = `${tx('tier.' + _benchResult.tier)} • score ${_benchResult.score}/100 — ${tx('tierd.' + _benchResult.tier)}`
+    if(box){
+      const rows = describeResult(_benchResult)
+      box.innerHTML = `<dl class="settings-kv">${rows.map(r =>
+        `<dt>${r.label}</dt><dd><span class="bench-${r.status}">●</span> ${r.value}</dd>`
+      ).join('')}</dl>`
     }
   }
 
@@ -355,14 +454,20 @@ export function mountSetupWizard(opts={}){
     root.querySelector('[data-act="next"]')?.addEventListener('click', async ()=>{
       collectStep()
       if(step===1) await saveKeysToBackend()
-      if(step<3){ step++; render() }
+      if(step===3) applyWizardBenchmark()
+      if(step<4){ step++; render() }
     })
     root.querySelector('[data-act="finish"]')?.addEventListener('click', async ()=>{
       collectStep()
+      applyWizardBenchmark()
       await saveKeysToBackend()
       setOnboarded(true)
       close()
       onFinish({ skipped:false })
+    })
+    root.querySelector('[data-act="bench-rerun"]')?.addEventListener('click', async ()=>{
+      _benchResult = null
+      startWizardBenchmark()
     })
     root.querySelectorAll('[data-lang]').forEach(btn=>{
       btn.addEventListener('click', ()=>{

@@ -1,0 +1,12 @@
+{
+  "source": "local — swap for the GitHub repo listing in production",
+  "extensions": [
+    {
+      "id": "wpkg-editor",
+      "name": "WPKG Editor",
+      "version": "1.1.0",
+      "description": "Create, validate and rate character packages (.wpkg) with age ratings, tags and outfit management.",
+      "size": "~48 KB, loaded on demand"
+    }
+  ]
+}

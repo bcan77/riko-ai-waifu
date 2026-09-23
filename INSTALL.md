@@ -83,7 +83,7 @@ Electron (`apps/desktop/electron/main.js`) `uvicorn`'u otomatik olarak `:8000` (
 
 ## 6) WPKG karakterler
 
-Paketler `characters/*.wpkg` içinde önceden derlenmiş (174 MB). Uygulama içinde: **Panel → WPKG → İçe aktar/Doğrula/Kaydet**. Kaynaktan yeniden derlemek için:
+Paketler `characters/*.wpkg` içinde önceden derlenmiş (174 MB). Uygulama içinde: **Ayarlar → Eklentiler → WPKG Editor**’ü kur, sonra **İçe aktar/Doğrula/Kaydet** (bkz. [WPKG.md](WPKG.md)). Kaynaktan yeniden derlemek için:
 
 ```bash
 # Yerelde MMD_Models_MiHoyo/ gerektirir (dahil değil — boyut için çıkarıldı)
@@ -95,7 +95,7 @@ npm --prefix packages/wpkg test
 ## 7) Uçtan uca doğrulama
 
 1. Backend logu `Uvicorn running on http://0.0.0.0:8000`, frontend `VITE v8.x ready`.
-2. `http://localhost:5173` aç → durum `Booting…` → `Ready`.
+2. `http://localhost:5173` aç → canlı istatistikli tam ekran **panel** → **Sahneye Gir** 3D’yi başlatır (durum `Ready` olur).
 3. Sohbet → `merhaba` → `llm_start` → akan tokenler → `tts_start` → ses + dudak senkronu (`a,i,u,e,o` 60fps) gör.
 4. `GET http://localhost:8000/api/wpkg/list` `.wpkg` dosyalarını listeler.
 

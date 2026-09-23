@@ -1,6 +1,11 @@
 export const SPEC_VERSION = 1;
 
+/** Age ratings — 'all' (All Ages) | '12' (12+) | '18' (18+) */
+export const RATINGS = ['all', '12', '18'];
+export const RATING_LABELS = { all: 'All Ages', '12': '12+', '18': '18+' };
+
 const OUTFIT_ID_RE = /^[a-z0-9_-]{2,32}$/;
+const TAG_RE = /^[a-z0-9-]{2,24}$/;
 
 export function validateManifest(m) {
   const errs = [];
@@ -41,7 +46,41 @@ export function validateManifest(m) {
   }
   if (m.outfit_default !== undefined && typeof m.outfit_default !== 'string') errs.push('outfit_default must be string');
   if (m.outfit_default && m.outfits && !m.outfits.some(o => o.id === m.outfit_default)) errs.push('outfit_default must match an outfit id');
+  // content metadata — optional, backwards-compatible (defaults to All Ages)
+  if (m.rating !== undefined && !RATINGS.includes(m.rating)) errs.push('rating must be one of: all, 12, 18');
+  if (m.description !== undefined && (typeof m.description !== 'string' || m.description.length > 2000)) errs.push('description max 2000 chars');
+  if (m.tags !== undefined) {
+    if (!Array.isArray(m.tags)) errs.push('tags must be array');
+    else {
+      if (m.tags.length > 24) errs.push('tags max 24');
+      const seenTags = new Set();
+      for (let i = 0; i < m.tags.length; i++) {
+        const t = m.tags[i];
+        if (typeof t !== 'string' || !TAG_RE.test(t)) errs.push(`tags[${i}] 2-24 [a-z0-9-]`);
+        else if (seenTags.has(t)) errs.push(`tags[${i}] duplicate: ${t}`);
+        else seenTags.add(t);
+      }
+    }
+  }
+  if (m.content_flags !== undefined) {
+    if (!Array.isArray(m.content_flags)) errs.push('content_flags must be array');
+    else if (m.content_flags.length > 12) errs.push('content_flags max 12');
+    else for (let i = 0; i < m.content_flags.length; i++) {
+      const f = m.content_flags[i];
+      if (typeof f !== 'string' || !TAG_RE.test(f)) errs.push(`content_flags[${i}] 2-24 [a-z0-9-]`);
+    }
+  }
   return errs;
+}
+
+/** Normalize optional metadata with safe defaults (call after validate). */
+export function normalizeMeta(m) {
+  const out = { ...m };
+  if (!RATINGS.includes(out.rating)) out.rating = 'all';
+  if (!Array.isArray(out.tags)) out.tags = [];
+  if (!Array.isArray(out.content_flags)) out.content_flags = [];
+  if (typeof out.description !== 'string') out.description = '';
+  return out;
 }
 
 export function getOutfits(manifest) {
@@ -70,6 +109,10 @@ export function defaultManifest(id) {
     prompts: { system_file: 'prompts/system.md' },
     motions: { idle: 'motions/idle.vmd', gestures: {} },
     affinity: 0.5,
+    rating: 'all',
+    tags: [],
+    content_flags: [],
+    description: '',
     created_at: new Date().toISOString().slice(0, 10)
   };
 }

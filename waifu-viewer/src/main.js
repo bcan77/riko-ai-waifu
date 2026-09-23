@@ -3,12 +3,15 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { MMDLoader } from 'three/examples/jsm/loaders/MMDLoader.js'
 import { MMDAnimationHelper } from 'three/examples/jsm/animation/MMDAnimationHelper.js'
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js'
+import gsap from 'gsap'
 import { WaifuClient } from './services/waifu-client.js'
 import { createMorphDriver } from './services/morph-driver.js'
-import { mountWpkgEditor } from './editor/WpkgEditor.js'
+import { syncExtensionBody, isInstalled as isExtInstalled, installExtension, getEditorHandle } from './services/extensions.js'
+import { t } from './services/i18n.js'
 import './editor/editor.css'
 import './settings/settings.css'
-import { load as loadSettings, get as getSettings, getRaw as getSettingsRaw, set as setSettings, onChange as onSettingsChange, DEFAULTS as SETTINGS_DEFAULTS, isOnboarded, setOnboarded } from './settings/store.js'
+import { load as loadSettings, get as getSettings, getRaw as getSettingsRaw, set as setSettings, onChange as onSettingsChange, DEFAULTS as SETTINGS_DEFAULTS, LIGHTING_PRESETS, isOnboarded, setOnboarded } from './settings/store.js'
 import { mountSettingsModal } from './settings/SettingsModal.js'
 import { mountSetupWizard } from './settings/SetupWizard.js'
 import { registerBackgroundSphere, registerBackgroundGroup, registerGround, registerCamera, applyBackground, fetchBackgrounds, setBackground, getCamDebug, setCamDebugTransform, resetCamDebug, getCamLive, getBgDebug, setBgDebugTransform, resetBgDebug, getBgLiveTransform } from './services/background-manager.js'
@@ -336,10 +339,12 @@ const ground = (() => {
   return out
 })()
 
-// Lights — game-like (ZZZ/Genshin high-key anime)
-// Reference: soft studio, even fill, strong warm rim on hair, light ground bounce.
-// Character and background share lights but character stays ~0.3 stops brighter.
-const hemiLight = new THREE.HemisphereLight(0xffffff, 0xffe8cc, 1.05)
+// Lights — game-like high-key anime (ZZZ/Genshin) + soft IBL + contact shadow
+// Key gives form, cool fill lifts shadows, warm rim separates hair from bg,
+// hemisphere bounces sky/ground, face fill tracks the head bone so the face
+// never goes dark in profile. A cheap blob shadow grounds the character even
+// when the directional shadow is soft or off.
+const hemiLight = new THREE.HemisphereLight(0xdfeaff, 0x8a6f55, 1.05)
 hemiLight.position.set(0, 20, 0)
 scene.add(hemiLight)
 
@@ -353,9 +358,9 @@ keyLight.shadow.camera.left = -22
 keyLight.shadow.camera.right = 22
 keyLight.shadow.camera.top = 22
 keyLight.shadow.camera.bottom = -22
-keyLight.shadow.bias = -0.0008
-keyLight.shadow.radius = 4
-keyLight.shadow.normalBias = 0.02
+keyLight.shadow.bias = -0.0006
+keyLight.shadow.radius = 5
+keyLight.shadow.normalBias = 0.025
 scene.add(keyLight)
 scene.add(keyLight.target)
 keyLight.target.position.set(0, 8, 0)
@@ -396,6 +401,38 @@ scene.add(faceLight.target)
 window.faceLight = faceLight // debug: tweak intensity in console
 let headBone = null
 window._getHeadBone = ()=> headBone
+// Soft image-based lighting: neutral studio room at low strength so PBR mats
+// (cloth/hair highlights) get gentle reflections instead of flat diffuse.
+// envMapIntensity is dialled down per-material on model load so the anime
+// toon look stays matte.
+try{
+  const pmrem = new THREE.PMREMGenerator(renderer)
+  const envTex = pmrem.fromScene(new RoomEnvironment(), 0.06).texture
+  scene.environment = envTex
+  scene.environmentIntensity = 0.32
+  pmrem.dispose()
+}catch(e){ console.warn('[lights] IBL skipped', e?.message||e) }
+// Contact blob shadow — radial gradient plane that follows the model.
+// Cheap grounding cue that survives soft/PCF shadows and low-end GPUs.
+const contactShadow = (()=>{
+  try{
+    const c = document.createElement('canvas'); c.width = c.height = 128
+    const g = c.getContext('2d')
+    const grad = g.createRadialGradient(64,64,6, 64,64,62)
+    grad.addColorStop(0, 'rgba(0,0,0,0.42)')
+    grad.addColorStop(0.55, 'rgba(0,0,0,0.22)')
+    grad.addColorStop(1, 'rgba(0,0,0,0)')
+    g.fillStyle = grad; g.fillRect(0,0,128,128)
+    const tex = new THREE.CanvasTexture(c)
+    const mat = new THREE.MeshBasicMaterial({ map: tex, transparent: true, depthWrite: false })
+    const mesh = new THREE.Mesh(new THREE.PlaneGeometry(7, 7), mat)
+    mesh.rotation.x = -Math.PI/2
+    mesh.position.y = 0.03
+    mesh.renderOrder = 1
+    scene.add(mesh)
+    return mesh
+  }catch{ return null }
+})()
 // helper to find head bone from skeleton
 function bindHeadBone(){
   headBone = null
@@ -415,6 +452,54 @@ renderer.physicallyCorrectLights = true
 // game-like: slightly higher exposure, ACES stays, add subtle ambient for face
 try{ hemiLight.intensity = 1.05; ambient.intensity = 0.78; }catch{}
 
+// ---- Lighting presets (shared with SettingsModal via store) ----
+function applyLightingPreset(id, { persist=true }={}){
+  const p = LIGHTING_PRESETS[id]
+  if(!p) return false
+  keyLight.intensity = p.keyIntensity
+  fillLight.intensity = p.fillIntensity
+  rimLight.intensity = p.rimIntensity
+  backLight.intensity = p.backIntensity
+  ambient.intensity = p.ambientIntensity
+  hemiLight.intensity = p.hemiIntensity
+  faceLight.intensity = p.faceIntensity
+  renderer.toneMappingExposure = p.exposure
+  try{ keyLight.color.setHex(p.keyColor); rimLight.color.setHex(p.rimColor) }catch{}
+  if(persist) setSettings({
+    lightingPreset: id,
+    keyIntensity: p.keyIntensity, fillIntensity: p.fillIntensity,
+    rimIntensity: p.rimIntensity, backIntensity: p.backIntensity,
+    ambientIntensity: p.ambientIntensity, hemiIntensity: p.hemiIntensity,
+    faceIntensity: p.faceIntensity, exposure: p.exposure,
+  })
+  syncLightPresetUI(id)
+  return true
+}
+function syncLightPresetUI(activeId){
+  const cur = activeId || getSettingsRaw().lightingPreset
+  document.querySelectorAll('[data-preset]').forEach(b=>{
+    b.classList.toggle('active', b.dataset.preset===cur)
+  })
+}
+window.applyLightingPreset = applyLightingPreset
+
+// ---- Developer mode — gate advanced UI behind body.dev ----
+function setDeveloperMode(on){
+  setSettings({ developerMode: !!on })
+  // applySettingsPatch picks up the store change and flips body.dev;
+  // flip immediately too so the toggle feels instant.
+  document.body.classList.toggle('dev', !!on)
+  syncDevUI(!!on)
+  toast(!!on ? 'Developer mode ON — advanced settings unlocked 🛠' : 'Developer mode OFF — simple view', 2200)
+}
+function syncDevUI(on){
+  const btn = document.getElementById('btnDevFooter')
+  if(btn) btn.innerHTML = `🛠 Developer mode: <b>${on?'ON':'OFF'}</b>`
+  const top = document.getElementById('btnDev')
+  if(top) top.title = on ? 'Developer mode ON — click to hide advanced' : 'Toggle Developer mode (advanced settings)'
+}
+window.setDeveloperMode = setDeveloperMode
+
 // ---- Apply persisted settings to scene immediately
 function applyInitialSettings(){
   const s = getSettingsRaw()
@@ -423,6 +508,10 @@ function applyInitialSettings(){
   rimLight.intensity = s.rimIntensity
   backLight.intensity = s.backIntensity
   ambient.intensity = s.ambientIntensity
+  hemiLight.intensity = s.hemiIntensity ?? 1.05
+  faceLight.intensity = s.faceIntensity ?? 0.55
+  const preset = LIGHTING_PRESETS[s.lightingPreset]
+  if(preset){ try{ keyLight.color.setHex(preset.keyColor); rimLight.color.setHex(preset.rimColor) }catch{} }
   renderer.toneMappingExposure = s.exposure
   const wantShadows = s.shadows && !(navigator.deviceMemory && navigator.deviceMemory < 4 && s.shadows)
   // if deviceMemory <4 we still respect user's shadows toggle but disable if low mem and not overridden
@@ -438,6 +527,10 @@ function applyInitialSettings(){
   controls.minPolarAngle = s.minPolarAngle
   // reflect slider UI if present (drawer + settings will also bind)
   const setVal = (id, v)=>{ const el=document.getElementById(id); if(el) el.textContent=v }
+  // developer gating + preset pills reflect immediately (no FOUC of advanced UI)
+  document.body.classList.toggle('dev', !!s.developerMode)
+  syncDevUI(!!s.developerMode)
+  syncLightPresetUI(s.lightingPreset)
   // defer until DOM ready
   requestAnimationFrame(()=>{
     const s2 = getSettingsRaw()
@@ -445,13 +538,18 @@ function applyInitialSettings(){
     q('keyIntensity', s2.keyIntensity); setVal('keyVal', s2.keyIntensity.toFixed(1))
     q('fillIntensity', s2.fillIntensity); setVal('fillVal', s2.fillIntensity.toFixed(2))
     q('rimIntensity', s2.rimIntensity); setVal('rimVal', s2.rimIntensity.toFixed(1))
+    q('hemiIntensity', s2.hemiIntensity); setVal('hemiVal', Number(s2.hemiIntensity).toFixed(2))
+    q('faceIntensity', s2.faceIntensity); setVal('faceVal', Number(s2.faceIntensity).toFixed(2))
     q('exposure', s2.exposure); setVal('expVal', s2.exposure.toFixed(2))
     q('gravity', s2.gravity); setVal('gravVal', s2.gravity.toFixed(1))
     q('speed', s2.speed); setVal('speedVal', s2.speed.toFixed(2)+'×')
     const ch=(id,v)=>{ const e=document.getElementById(id); if(e) e.checked=!!v }
     ch('shadowChk', s2.shadows); ch('groundChk', s2.ground); ch('physicsChk', s2.physics); ch('ikChk', s2.ik)
     ch('loopChk', s2.loop); ch('mirrorChk', s2.mirror); ch('autoRotateChk', s2.autoRotate)
-    ch('premiumChk', s2.premium)
+    ch('premiumChk', s2.premium); ch('autoQualityChk', s2.autoQuality)
+    document.body.classList.toggle('dev', !!s2.developerMode)
+    syncDevUI(!!s2.developerMode)
+    syncLightPresetUI(s2.lightingPreset)
   })
 }
 applyInitialSettings()
@@ -819,6 +917,10 @@ async function loadModel(model){
           if('roughness' in mat) mat.roughness = 0.85
           if('metalness' in mat) mat.metalness = 0.02
         }
+        // keep IBL subtle on anime mats — environment is for soft speculars only
+        if(scene.environment && 'envMapIntensity' in mat){
+          try{ mat.envMapIntensity = wasFace ? 0.12 : 0.28 }catch{}
+        }
       })
     }
   })
@@ -1122,8 +1224,35 @@ $('#rimIntensity')?.addEventListener('input', e=>{
   const v = parseFloat(e.target.value)
   $('#rimVal').textContent = v.toFixed(1)
   rimLight.intensity = v
-  setSettings({ rimIntensity: v })
+  setSettings({ rimIntensity: v, lightingPreset: getSettingsRaw().lightingPreset })
+  syncLightPresetUI()
 })
+$('#hemiIntensity')?.addEventListener('input', e=>{
+  const v = parseFloat(e.target.value)
+  $('#hemiVal').textContent = v.toFixed(2)
+  hemiLight.intensity = v
+  setSettings({ hemiIntensity: v })
+})
+$('#faceIntensity')?.addEventListener('input', e=>{
+  const v = parseFloat(e.target.value)
+  $('#faceVal').textContent = v.toFixed(2)
+  faceLight.intensity = v
+  setSettings({ faceIntensity: v })
+})
+$('#autoQualityChk')?.addEventListener('change', e=>{
+  setSettings({ autoQuality: e.target.checked })
+  toast('Auto quality ' + (e.target.checked?'ON':'OFF'), 1400)
+})
+// lighting preset pills (drawer) — one click, simple for end users
+document.querySelectorAll('#lightPresetRow [data-preset]').forEach(b=>{
+  b.addEventListener('click', ()=>{
+    applyLightingPreset(b.dataset.preset)
+    toast(`Lighting: ${LIGHTING_PRESETS[b.dataset.preset]?.label || b.dataset.preset} ♡`, 1800)
+  })
+})
+// developer mode toggles (topbar + panel footer)
+document.getElementById('btnDev')?.addEventListener('click', ()=> setDeveloperMode(!getSettingsRaw().developerMode))
+document.getElementById('btnDevFooter')?.addEventListener('click', ()=> setDeveloperMode(!getSettingsRaw().developerMode))
 $('#exposure')?.addEventListener('input', e=>{
   const v = parseFloat(e.target.value)
   $('#expVal').textContent = v.toFixed(2)
@@ -1154,35 +1283,20 @@ document.querySelectorAll('[data-cam]').forEach(b=>{
       top:[0, 32, 0.1],
     }[t]
     if(!pos) return
-    const start = camera.position.clone()
-    const target = new THREE.Vector3(...pos)
-    let u = 0
-    const step = () => {
-      u = Math.min(1, u + 0.04)
-      const k = 1 - Math.pow(1-u, 3)
-      camera.position.lerpVectors(start, target, k)
-      if(t==='top') camera.position.x = 0.1
-      if(u<1) requestAnimationFrame(step)
-    }
-    step()
-    controls.target.set(0,9,0)
+    gsap.killTweensOf(camera.position)
+    gsap.to(camera.position, { x:pos[0], y:pos[1], z:pos[2], duration:0.9, ease:'power3.inOut', overwrite:true })
+    gsap.to(controls.target, { x:0, y:9, z:0, duration:0.9, ease:'power3.inOut', overwrite:true,
+      onUpdate:()=> controls.update() })
   })
 })
 
 function lerpCameraTo(preset){
   const pos = { front:[0,13.2,22], side:[22,13,0], back:[0,13,-22], top:[0,32,0.1] }[preset]
   if(!pos) return
-  const start = camera.position.clone()
-  const target = new THREE.Vector3(...pos)
-  let u=0
-  const step=()=>{
-    u=Math.min(1,u+0.04); const k=1-Math.pow(1-u,3)
-    camera.position.lerpVectors(start,target,k)
-    if(preset==='top') camera.position.x=0.1
-    if(u<1) requestAnimationFrame(step)
-  }
-  step()
-  controls.target.set(0,9,0)
+  gsap.killTweensOf(camera.position)
+  gsap.to(camera.position, { x:pos[0], y:pos[1], z:pos[2], duration:0.9, ease:'power3.inOut', overwrite:true })
+  gsap.to(controls.target, { x:0, y:9, z:0, duration:0.9, ease:'power3.inOut', overwrite:true,
+    onUpdate:()=> controls.update() })
 }
 
 // ---- Settings modal + store wiring ----
@@ -1197,6 +1311,11 @@ function applySettingsPatch(changed){
   if('rimIntensity' in changed) { rimLight.intensity = changed.rimIntensity; const e=document.getElementById('rimIntensity'); if(e&&document.activeElement!==e) e.value=changed.rimIntensity; const v=document.getElementById('rimVal'); if(v) v.textContent=Number(changed.rimIntensity).toFixed(1) }
   if('backIntensity' in changed) backLight.intensity = changed.backIntensity
   if('ambientIntensity' in changed) ambient.intensity = changed.ambientIntensity
+  if('hemiIntensity' in changed) { hemiLight.intensity = changed.hemiIntensity; const e=document.getElementById('hemiIntensity'); if(e&&document.activeElement!==e) e.value=changed.hemiIntensity; const v=document.getElementById('hemiVal'); if(v) v.textContent=Number(changed.hemiIntensity).toFixed(2) }
+  if('faceIntensity' in changed) { faceLight.intensity = changed.faceIntensity; const e=document.getElementById('faceIntensity'); if(e&&document.activeElement!==e) e.value=changed.faceIntensity; const v=document.getElementById('faceVal'); if(v) v.textContent=Number(changed.faceIntensity).toFixed(2) }
+  if('lightingPreset' in changed) syncLightPresetUI(changed.lightingPreset)
+  if('developerMode' in changed){ document.body.classList.toggle('dev', !!changed.developerMode); syncDevUI(!!changed.developerMode) }
+  if('autoQuality' in changed){ const e=document.getElementById('autoQualityChk'); if(e) e.checked=!!changed.autoQuality }
   if('exposure' in changed) { renderer.toneMappingExposure = changed.exposure; const e=document.getElementById('exposure'); if(e&&document.activeElement!==e) e.value=changed.exposure; const v2=document.getElementById('expVal'); if(v2) v2.textContent=Number(changed.exposure).toFixed(2) }
   if('shadows' in changed){ renderer.shadowMap.enabled = changed.shadows; keyLight.castShadow = changed.shadows; const e=document.getElementById('shadowChk'); if(e) e.checked=!!changed.shadows }
   if('ground' in changed){ ground.mesh.visible=!!changed.ground; ground.grid.visible=!!changed.ground; ground.line.visible=!!changed.ground; const e=document.getElementById('groundChk'); if(e) e.checked=!!changed.ground }
@@ -1240,6 +1359,9 @@ function applySettingsPatch(changed){
   if('affinity' in changed){ const el=document.getElementById('affinityVal'); if(el) el.textContent=Number(changed.affinity).toFixed(2); const bar=document.querySelector('#affinityBar i'); if(bar) bar.style.width=(Number(changed.affinity)*100).toFixed(0)+'%' }
   if('backgroundId' in changed){ applyBackground(changed.backgroundId, scene); renderBgGrid() }
   if('backgroundBlur' in changed){ /* reserved */ }
+  if('extensions' in changed){ syncExtensionBody() }
+  if('benchmarkTier' in changed && document.body.dataset.screen === 'dashboard'){ refreshDashboard() }
+  if(('modelId' in changed || 'affinity' in changed) && document.body.dataset.screen === 'dashboard'){ refreshDashboard() }
 }
 
 function initSettingsModal(){
@@ -1256,11 +1378,12 @@ function initSettingsModal(){
       else if(a.type==='resetPose') document.getElementById('btnReset')?.click()
       else if(a.type==='cam') lerpCameraTo(a.preset)
       else if(a.type==='resetCamera'){ camera.position.set(0,13.2,22); controls.target.set(0,9,0); controls.update(); toast('Camera reset') }
-      else if(a.type==='wpkgOpen') window.wpkgEditor?.open()
+      else if(a.type==='wpkgOpen') window.openWpkgEditor?.()
       else if(a.type==='wpkgReload') document.getElementById('btnWpkgReload')?.click()
       else if(a.type==='toast') toast(a.text)
       else if(a.type==='settingsImported'){ applyInitialSettings(); applyRendererSize(); if(waifu) waifu.premium=!!getSettingsRaw().premium; toast('Settings imported ♡') }
       else if(a.type==='field'){ applySettingsPatch({ [a.field]: a.value }) }
+      else if(a.type==='preset'){ applyLightingPreset(a.id); toast(`Lighting: ${LIGHTING_PRESETS[a.id]?.label || a.id} ♡`, 1800) }
       else if(a.type==='export'){ /* handled inside modal */ }
       else if(a.type==='rerunSetup'){ setupWizard?.open() }
     }
@@ -1282,16 +1405,6 @@ function initSettingsModal(){
 }
 initSettingsModal()
 const __ver = initVersionManager({ pollIntervalMs: 15000, checkOnFocus: true, autoReload: false })
-try{
-  const el=document.getElementById('appVersion')
-  if(el){
-    const v = __ver.getCurrent?.().version || (typeof __APP_VERSION__!=='undefined'?__APP_VERSION__:'EU-0.3.7-02')
-    el.textContent='v'+v
-    el.title=`v${v} • click to check for updates`
-    el.style.cursor='pointer'
-    el.addEventListener('click', ()=> { __ver.check({silent:false}); toast('Checking for updates…') })
-  }
-}catch{}
 
 // ---- Setup wizard (first-boot onboarding) ----
 function initSetupWizard(){
@@ -1302,8 +1415,8 @@ function initSetupWizard(){
       applyInitialSettings()
       applyRendererSize()
       if(!skipped) toast('Setup complete ♡')
-      // if stage not yet entered, go there now
-      try{ if(!bootStarted) enterStage() }catch{}
+      // land back on the dashboard with fresh stats
+      try{ setScreen('dashboard') }catch{}
     }
   })
   window.setupWizard = setupWizard
@@ -1312,16 +1425,9 @@ function initSetupWizard(){
     const s = getSettingsRaw()
     if(!s.onboarded && (s.openrouterApiKey || s.groqApiKey)) setOnboarded(true)
   }catch{}
-  // first-boot: show macOS-like setup immediately (covers main menu)
+  // first-boot: show macOS-like setup immediately (covers dashboard)
   if(setupWizard.shouldShow()){
-    try{ document.getElementById('mainMenu')?.classList.add('hidden') }catch{}
     setTimeout(()=> setupWizard.open(), 400)
-  } else {
-    // with main menu present, don't auto-popup over it; only auto-show if menu dismissed
-    const menuDismissed = (()=>{ try{ return sessionStorage.getItem('waifu:menuDismissed')==='1'}catch{return false} })()
-    if(menuDismissed && setupWizard.shouldShow()){
-      setTimeout(()=> setupWizard.open(), 700)
-    }
   }
   // also try to sync existing local keys to backend on boot (covers case where backend was offline when key was pasted)
   // first pull backend model so manual backend edits are adopted, then push local state
@@ -1406,8 +1512,10 @@ function initWaifuBridge() {
   // expose for debug
   window.waifu = waifu
   window.morphDriver = morphDriver
-  // mount wpkg editor (hidden until button)
-  try { const ed = mountWpkgEditor(); window.wpkgEditor = ed; } catch(e){ console.warn('wpkg editor mount failed', e) }
+  // wpkg editor is an optional add-on — mount only if installed
+  if(isExtInstalled('wpkg-editor')){
+    installExtension('wpkg-editor').catch(e=> console.warn('wpkg editor mount failed', e))
+  }
 
   // tools: hitboxing + eye tracking (respect settings toggles)
   const s0 = getSettingsRaw()
@@ -1479,13 +1587,24 @@ function initWaifuBridge() {
   input?.addEventListener('keydown', (e) => { if (e.key === 'Enter') doSend() })
   btnStop?.addEventListener('click', () => waifu.stop())
   premiumChk?.addEventListener('change', (e) => { waifu.premium = e.target.checked; setSettings({ premium: e.target.checked }) })
-  // .wpkg editor buttons (panel)
-  document.getElementById('btnWpkg')?.addEventListener('click', () => window.wpkgEditor?.open())
+  // .wpkg editor buttons (panel) — add-on must be installed first
+  async function openWpkgEditor(){
+    if(getEditorHandle() || isExtInstalled('wpkg-editor')){
+      try{
+        const ed = getEditorHandle() || await installExtension('wpkg-editor')
+        ed?.open(); ed?.refreshList?.()
+        return
+      }catch(e){ toast('Editor failed to load: ' + (e?.message||e), 2600); return }
+    }
+    toast('WPKG Editor is an add-on — install it in Settings → Extensions', 3000)
+  }
+  document.getElementById('btnWpkg')?.addEventListener('click', openWpkgEditor)
+  window.openWpkgEditor = openWpkgEditor
   document.getElementById('btnWpkgReload')?.addEventListener('click', async () => {
     try {
       const r = await fetch('/api/wpkg/list'); const data = await r.json();
       toast(`WPKGs: ${data.map(d=>d.file).join(', ') || 'none'}`);
-      window.wpkgEditor?.refreshList?.();
+      getEditorHandle()?.refreshList?.();
     } catch(e){ toast('reload failed: '+e.message) }
   })
 
@@ -1572,13 +1691,14 @@ function initWaifuBridge() {
   })
 }
 
-// FPS
+// FPS (topbar pill was removed for declutter — fps now feeds auto-quality + dashboard)
 let fpsEl = $('#fps')
 let lastFpsT = performance.now()
 let frames = 0
+window.__lastFps = 0
 
-// Affinity UI ticker
-setInterval(()=>{ const el=document.getElementById('affinityVal'); const bar=document.querySelector('#affinityBar i'); const v=affinity.get(); if(el) el.textContent=v.toFixed(2); if(bar) bar.style.width=(v*100).toFixed(0)+'%'; }, 1000);
+// Affinity UI ticker (2s — value changes rarely, no need for 1s churn)
+setInterval(()=>{ const el=document.getElementById('affinityVal'); const bar=document.querySelector('#affinityBar i'); const v=affinity.get(); if(el) el.textContent=v.toFixed(2); if(bar) bar.style.width=(v*100).toFixed(0)+'%'; }, 2000);
 
 // Panel — drawer overlay, collapsed by default (stage-first)
 const panelEl = document.querySelector('.panel')
@@ -1814,7 +1934,7 @@ function mountBgDebug(){
   try{ const b=document.getElementById('btnBgDebug'); if(b) b.textContent='🛠 Debug (full)' }catch{}
   document.getElementById('btnBgDebug')?.addEventListener('click', openDbg)
   addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey)&&e.shiftKey&&(e.key.toLowerCase()==='d'||e.key.toLowerCase()==='c')){ e.preventDefault(); toggle() } })
-  setInterval(()=>{ if(!open||root.classList.contains('hidden')) return; const out=root.querySelector('#dbgOut'); if(out) out.textContent=buildOutput() }, 800)
+  setInterval(()=>{ if(!open||root.classList.contains('hidden')) return; const out=root.querySelector('#dbgOut'); if(out) out.textContent=buildOutput() }, 1200)
 }
 mountBgDebug()
 // live update via HMR
@@ -1824,44 +1944,103 @@ if(import.meta.hot){
     renderBgGrid()
   })
 } else {
-  // polling fallback every 6s while dev
+  // polling fallback every 10s while dev
   setInterval(async ()=>{
     const fresh = await fetchBackgrounds()
     if(fresh.length!==bgListCache.length || fresh.map(x=>x.id).join(',')!==bgListCache.map(x=>x.id).join(',')){
       bgListCache = fresh
       renderBgGrid()
     }
-  }, 6000)
+  }, 10000)
 }
 
-// Main Menu — gate before character screen
-let menuDismissed = sessionStorage.getItem('waifu:menuDismissed') === '1'
+// Screens — full-screen dashboard (home) vs stage (3D). No more floating menu:
+// dashboard is its own view; the 3D stage boots lazily on first Enter.
 let bootStarted = false
 let bootPromise = null
-function showMainMenu(){
-  const el = document.getElementById('mainMenu')
-  if(!el) return
-  el.classList.remove('hidden')
-  const hint = document.getElementById('menuHint')
-  const enterBtn = document.getElementById('btnMenuEnter')
+function setScreen(name){
+  document.body.dataset.screen = name === 'stage' ? 'stage' : 'dashboard'
+  if(name === 'dashboard') refreshDashboard()
+}
+/** Static dashboard chrome in the user's language (dynamic numbers handled by refreshDashboard). */
+function applyDashboardI18n(){
+  const set = (id, key) => { const el = document.getElementById(id); if(el) el.textContent = t(key) }
+  const setHtml = (id, key) => { const el = document.getElementById(id); if(el) el.innerHTML = t(key) }
+  set('btnDashEnter', getSettingsRaw().onboarded ? 'dash.enter' : 'dash.enterMock')
+  set('btnDashSetup', 'dash.setup')
+  set('btnDashBench', 'dash.bench')
+  set('btnDashSettings', 'dash.settings')
+  set('dashLabelStage', 'dash.stage')
+  set('dashLabelLib', 'dash.library')
+  set('dashLabelBrain', 'dash.brain')
+  set('dashLabelPerf', 'dash.perf')
+  set('btnDashBackgrounds', 'dash.changeBg')
+  set('btnDashWpkg', 'dash.wpkg')
+  set('btnDashKeys', 'dash.keys')
+  set('btnDashBench2', 'dash.runBench')
+  setHtml('dashSubtitle', getSettingsRaw().onboarded ? 'dash.subReady' : 'dash.subNew')
+  setHtml('dashFootTip', 'dash.foot')
+}
+async function refreshDashboard(){
+  const dash = document.getElementById('dashboard')
+  if(!dash) return
   const s = getSettingsRaw()
-  if(!s.onboarded){
-    if(hint) hint.textContent = 'First time — hit Setup to add API keys, or Enter to try offline mock.'
-    if(enterBtn) enterBtn.textContent = '▶ Enter (offline mock)'
-  } else {
-    const bgLabel = s.backgroundId==='gradient'?'gradient': s.backgroundId==='solid'?'solid' : (bgListCache.find(b=>b.id===s.backgroundId)?.type==='model'?'3D room': 'image')
-    if(hint) hint.textContent = `Ready as ${s.modelId} • ${bgLabel} background • ${bgListCache.length} background${bgListCache.length===1?'':'s'} in backgrounds/`
-    if(enterBtn) enterBtn.textContent = '▶ Enter Stage'
+  applyDashboardI18n()
+  // store-driven bits — instant, no fetch
+  const model = MODELS.find(m => m.id === s.modelId)
+  const chEl = document.getElementById('dashCharacter')
+  if(chEl) chEl.textContent = model ? model.name : s.modelId
+  const afEl = document.getElementById('dashAffinity')
+  if(afEl) afEl.textContent = t('dash.affinity', { v: Number(s.affinity).toFixed(2), bg: s.backgroundId })
+  const benchEl = document.getElementById('dashBench')
+  if(benchEl){
+    const tiers = { excellent: 'ok', good: 'ok', basic: 'warn' }
+    if(s.benchmarkTier && tiers[s.benchmarkTier]){
+      benchEl.innerHTML = `<span class="${tiers[s.benchmarkTier]}">${t('tier.' + s.benchmarkTier)}</span>`
+      const meta = document.getElementById('dashBenchMeta')
+      if(meta) meta.textContent = s.benchmarkDate ? t('dash.benchMetaDone', { d: s.benchmarkDate.slice(0, 10) }) : t('dash.benchMeta')
+    } else {
+      benchEl.textContent = t('dash.benchNone')
+      const meta = document.getElementById('dashBenchMeta')
+      if(meta) meta.textContent = t('dash.benchMeta')
+    }
+  }
+  const verEl = document.getElementById('dashVersion')
+  if(verEl){
+    try{ verEl.textContent = 'v' + (__ver.getCurrent?.().version || '—') }catch{ verEl.textContent = 'v—' }
+  }
+  // live bits — best effort, never block the dashboard
+  try{
+    await fetchVmdList()
+    buildAnimList()
+    const vmdN = Math.max(0, ANIMATIONS.length - 1)
+    const vEl = document.getElementById('dashVmd')
+    if(vEl) vEl.textContent = t('dash.anims', { n: vmdN, s: vmdN === 1 ? '' : 's' })
+  }catch{}
+  try{
+    if(!bgListCache.length) bgListCache = await fetchBackgrounds()
+    const bEl = document.getElementById('dashBg')
+    if(bEl){
+      const rooms = bgListCache.filter(b => b.type === 'model').length
+      bEl.textContent = t('dash.bgs', { n: bgListCache.length }) + (rooms ? t('dash.rooms', { n: rooms }) : '')
+    }
+  }catch{}
+  try{
+    const r = await fetch('/health', { cache: 'no-store' })
+    const h = await r.json()
+    const bEl = document.getElementById('dashBackend')
+    if(bEl) bEl.innerHTML = h?.ok ? `<span class="ok">${t('dash.online')}</span>` : `<span class="warn">${t('dash.mock')}</span>`
+    const pEl = document.getElementById('dashProviders')
+    if(pEl) pEl.textContent = h?.ok ? t((h.has_openrouter || h.has_groq) ? 'dash.provKeys' : 'dash.provNoKeys', { llm: h.llm_provider || 'llm', tts: h.tts_provider || 'tts' }) : t('dash.offline')
+  }catch{
+    const bEl = document.getElementById('dashBackend')
+    if(bEl) bEl.innerHTML = `<span class="warn">${t('dash.mock')}</span>`
+    const pEl = document.getElementById('dashProviders')
+    if(pEl) pEl.textContent = t('dash.offline')
   }
 }
-function hideMainMenu(){
-  const el = document.getElementById('mainMenu')
-  if(el) el.classList.add('hidden')
-  menuDismissed = true
-  try{ sessionStorage.setItem('waifu:menuDismissed','1') }catch{}
-}
 async function enterStage(){
-  hideMainMenu()
+  setScreen('stage')
   if(!bootStarted){
     bootStarted = true
     bootPromise = bootApp()
@@ -1871,43 +2050,29 @@ async function enterStage(){
   // ensure camera focused
   focusCamera()
 }
-function initMainMenu(){
-  document.getElementById('btnMenuEnter')?.addEventListener('click', enterStage)
-  document.getElementById('btnMenuSkip')?.addEventListener('click', (e)=>{ e.preventDefault(); enterStage() })
-  document.getElementById('btnMenuSetup')?.addEventListener('click', ()=>{
-    hideMainMenu()
-    // show wizard (will re-show menu on close if not entered?)
-    setupWizard?.open()
-    // after wizard closes, if still not booted, enter
-    const origClose = setupWizard?.close
-    // hook finish: when wizard finishes, enter stage
-    // Instead, listen via onFinish already handles toast; we just wait then enter
-    // Let user manually hit Enter after setup, but auto-enter after 400ms if they closed wizard
-    setTimeout(()=>{ if(!bootStarted) showMainMenu() }, 500)
-  })
-  document.getElementById('btnMenuSettings')?.addEventListener('click', ()=>{
-    hideMainMenu()
-    settingsModal?.open()
-  })
-  document.getElementById('btnMenuBackgrounds')?.addEventListener('click', ()=>{
-    hideMainMenu()
-    // open panel on scene tab
+function backToDashboard(){
+  setScreen('dashboard')
+}
+function initDashboard(){
+  document.getElementById('btnDashEnter')?.addEventListener('click', enterStage)
+  document.getElementById('btnDashSetup')?.addEventListener('click', ()=> setupWizard?.open())
+  document.getElementById('btnDashSettings')?.addEventListener('click', ()=> settingsModal?.open())
+  document.getElementById('btnDashBench')?.addEventListener('click', ()=> settingsModal?.open('app'))
+  document.getElementById('btnDashBench2')?.addEventListener('click', ()=> settingsModal?.open('app'))
+  document.getElementById('btnDashKeys')?.addEventListener('click', ()=> settingsModal?.open('keys'))
+  document.getElementById('btnDashBackgrounds')?.addEventListener('click', async ()=>{
+    await enterStage()
     if(panelEl.classList.contains('collapsed')) togglePanel(true)
     document.querySelector('[data-panel-tab="scene"]')?.click()
-    if(!bootStarted){ bootStarted=true; bootPromise=bootApp() }
   })
-  // logo click reopens menu
-  document.querySelector('.logo')?.addEventListener('click', ()=>{
-    if(menuDismissed) showMainMenu()
+  document.getElementById('btnDashWpkg')?.addEventListener('click', ()=>{
+    if(getEditorHandle() || isExtInstalled('wpkg-editor')) window.openWpkgEditor?.()
+    else settingsModal?.open('extensions')
   })
-  // initial show if not dismissed
-  if(!menuDismissed) showMainMenu()
-  else {
-    // if dismissed this session but page reloaded via hard nav, still show once per session
-    // we already hid, so auto-boot
-    bootStarted = true
-    bootPromise = bootApp()
-  }
+  // topbar home button
+  document.getElementById('btnDash')?.addEventListener('click', backToDashboard)
+  // initial paint
+  setScreen('dashboard')
 }
 
 // Resize — dynamic resolution (debounced + DPR-aware)
@@ -1933,9 +2098,43 @@ try{
 
 // Render loop — throttled when tab hidden to fix "not responding" spam
 let lastFrame = performance.now()
+// scratch objects — reused every frame to avoid GC churn
+const _headPos = new THREE.Vector3()
+const _headQuat = new THREE.Quaternion()
+const _faceFwd = new THREE.Vector3()
+const _faceOffset = new THREE.Vector3()
+const _keyDir = new THREE.Vector3()
+const _moveFwd = new THREE.Vector3()
+const _moveRight = new THREE.Vector3()
+const _moveDelta = new THREE.Vector3()
+// adaptive quality — if fps sags with autoQuality on, step down once per session
+let _fpsEma = 60, _lowFpsSince = 0, _autoDegraded = false
+function maybeAutoQuality(nowFps){
+  if(_autoDegraded) return
+  const s = getSettingsRaw()
+  if(!s.autoQuality) return
+  _fpsEma = _fpsEma * 0.95 + nowFps * 0.05
+  if(_fpsEma < 27){
+    if(!_lowFpsSince) _lowFpsSince = performance.now()
+    if(performance.now() - _lowFpsSince > 3500){
+      _autoDegraded = true
+      try{
+        if(keyLight.shadow.mapSize.x > 1024){
+          keyLight.shadow.mapSize.set(1024,1024)
+          if(keyLight.shadow.map){ keyLight.shadow.map.dispose(); keyLight.shadow.map = null }
+        }
+        setSettings({ shadowRes: '1024' })
+      }catch{}
+      toast('Auto quality: shadows → 1024 for smoothness (Settings → Graphics to revert)', 3800)
+    }
+  } else if(_fpsEma > 40){
+    _lowFpsSince = 0
+  }
+}
 function animate(){
   requestAnimationFrame(animate)
   if(document.hidden) return
+  if(document.body.dataset.screen === 'dashboard') return // dashboard is DOM-only, save GPU pre-boot
   const tNow = performance.now()
   const cap = getSettingsRaw().fpsCap || 0
   if(cap===30 && tNow - lastFrame < 32) return
@@ -1951,20 +2150,26 @@ function animate(){
   // face light tracks head bone (face-forward, not N·L) — keeps face lit in profile
   if(headBone && faceLight && mmdMesh){
     try{
-      const headPos = new THREE.Vector3(); headBone.getWorldPosition(headPos)
-      const headQuat = new THREE.Quaternion(); headBone.getWorldQuaternion(headQuat)
-      const fwd = new THREE.Vector3(0,0,1).applyQuaternion(headQuat)
-      if(fwd.lengthSq() < 0.05) fwd.set(0,0,1).applyQuaternion(mmdMesh.quaternion)
-      fwd.normalize()
-      const lightPos = headPos.clone().addScaledVector(fwd, 7).add(new THREE.Vector3(0,1.0,0))
-      faceLight.position.copy(lightPos)
-      faceLight.target.position.copy(headPos)
+      headBone.getWorldPosition(_headPos)
+      headBone.getWorldQuaternion(_headQuat)
+      _faceFwd.set(0,0,1).applyQuaternion(_headQuat)
+      if(_faceFwd.lengthSq() < 0.05) _faceFwd.set(0,0,1).applyQuaternion(mmdMesh.quaternion)
+      _faceFwd.normalize()
+      _faceOffset.set(0,1.0,0)
+      faceLight.position.copy(_headPos).addScaledVector(_faceFwd, 7).add(_faceOffset)
+      faceLight.target.position.copy(_headPos)
       faceLight.target.updateMatrixWorld()
-      // subtle backlit boost
-      const keyDir = new THREE.Vector3().copy(keyLight.position).sub(keyLight.target.position).normalize()
-      const backlit = fwd.dot(keyDir) < -0.20 ? 1 : 0
-      faceLight.intensity = 0.55 + backlit*0.20
+      // subtle backlit boost over the user's face-fill baseline
+      _keyDir.copy(keyLight.position).sub(keyLight.target.position).normalize()
+      const backlit = _faceFwd.dot(_keyDir) < -0.20 ? 1 : 0
+      const base = getSettingsRaw().faceIntensity ?? 0.55
+      faceLight.intensity = base + backlit*0.20
     }catch{}
+  }
+  // contact shadow follows the model — cheap grounding cue
+  if(contactShadow){
+    if(mmdMesh){ contactShadow.position.x = mmdMesh.position.x; contactShadow.position.z = mmdMesh.position.z }
+    contactShadow.visible = ground.mesh.visible
   }
 
   // morph driver: sample viseme from audio clock (or perf if no audio)
@@ -1979,18 +2184,17 @@ function animate(){
   if(freecamEnabled && !params.autoRotate && !isTyping()){
     const base=freecamSpeed*(freecamKeys.shift?2.6:1)*(freecamKeys.ctrl?0.28:1)
     const mv=base*Math.min(dt*60,2)*0.12
-    const fwd=new THREE.Vector3(); camera.getWorldDirection(fwd)
-    const right=new THREE.Vector3().crossVectors(fwd,camera.up).normalize()
-    const up=new THREE.Vector3(0,1,0)
-    const delta=new THREE.Vector3()
-    if(freecamKeys.w) delta.addScaledVector(fwd, mv)
-    if(freecamKeys.s) delta.addScaledVector(fwd, -mv)
-    if(freecamKeys.a) delta.addScaledVector(right, -mv)
-    if(freecamKeys.d) delta.addScaledVector(right, mv)
-    if(freecamKeys.space||freecamKeys.e) delta.addScaledVector(up, mv)
-    if(freecamKeys.q) delta.addScaledVector(up, -mv)
-    if(delta.lengthSq()>1e-9){
-      camera.position.add(delta); controls.target.add(delta)
+    camera.getWorldDirection(_moveFwd)
+    _moveRight.crossVectors(_moveFwd,camera.up).normalize()
+    _moveDelta.set(0,0,0)
+    if(freecamKeys.w) _moveDelta.addScaledVector(_moveFwd, mv)
+    if(freecamKeys.s) _moveDelta.addScaledVector(_moveFwd, -mv)
+    if(freecamKeys.a) _moveDelta.addScaledVector(_moveRight, -mv)
+    if(freecamKeys.d) _moveDelta.addScaledVector(_moveRight, mv)
+    if(freecamKeys.space||freecamKeys.e) _moveDelta.y += mv
+    if(freecamKeys.q) _moveDelta.y -= mv
+    if(_moveDelta.lengthSq()>1e-9){
+      camera.position.add(_moveDelta); controls.target.add(_moveDelta)
       const np={x:+camera.position.x.toFixed(3),y:+camera.position.y.toFixed(3),z:+camera.position.z.toFixed(3)}
       const nt={x:+controls.target.x.toFixed(3),y:+controls.target.y.toFixed(3),z:+controls.target.z.toFixed(3)}
       setCamDebugTransform({pos:np, target:nt})
@@ -2010,11 +2214,13 @@ function animate(){
 
   frames++
   const now = performance.now()
-  if(now - lastFpsT > 500){
+  if(now - lastFpsT > 750){
     const fps = Math.round(frames*1000/(now-lastFpsT))
-    fpsEl.textContent = fps + ' fps'
+    window.__lastFps = fps
+    if(fpsEl) fpsEl.textContent = fps + ' fps'
     frames = 0
     lastFpsT = now
+    maybeAutoQuality(fps)
   }
 }
 animate()
@@ -2043,12 +2249,12 @@ if(import.meta.hot){
     await refreshVmdLive()
   })
 }
-// Fallback polling every 4s while dev server is running — cheap and catches external copies even if watcher misses
-let vmdPollId = setInterval(refreshVmdLive, 4000)
+// Fallback polling every 8s while dev server is running — cheap and catches external copies even if watcher misses
+let vmdPollId = setInterval(refreshVmdLive, 8000)
 // pause polling when tab hidden to save work
 document.addEventListener('visibilitychange', ()=>{
   if(document.hidden){ clearInterval(vmdPollId); vmdPollId=null }
-  else if(!vmdPollId){ vmdPollId = setInterval(refreshVmdLive, 4000); refreshVmdLive() }
+  else if(!vmdPollId){ vmdPollId = setInterval(refreshVmdLive, 8000); refreshVmdLive() }
 })
 
 // Boot — gated behind main menu
@@ -2071,8 +2277,9 @@ async function bootApp(){
     setLoader(true, 'Boot failed', 100, String(e?.message||e))
   }
 }
-// start menu (gates boot)
-initMainMenu()
+// start on the dashboard (stage boots lazily on Enter)
+syncExtensionBody()
+initDashboard()
 
 // Drag & drop support for custom VMD/PMX (also auto-adds dropped VMD to the live list in-memory)
 addEventListener('dragover', e=>{ e.preventDefault() })

@@ -83,7 +83,7 @@ Electron (`apps/desktop/electron/main.js`) auto-spawns `uvicorn` on `:8000` (or 
 
 ## 6) WPKG characters
 
-Bundles are prebuilt in `characters/*.wpkg` (174 MB). In-app: **Panel → WPKG → Import/Validate/Save**. To rebuild from source:
+Bundles are prebuilt in `characters/*.wpkg` (174 MB). In-app: install **Settings → Extensions → WPKG Editor**, then **Import/Validate/Save** (see [WPKG.en.md](WPKG.en.md)). To rebuild from source:
 
 ```bash
 # requires MMD_Models_MiHoyo/ locally (not included — stripped for size)
@@ -95,7 +95,7 @@ npm --prefix packages/wpkg test
 ## 7) Verify end-to-end
 
 1. Backend logs `Uvicorn running on http://0.0.0.0:8000`, frontend `VITE v8.x ready`.
-2. Open `http://localhost:5173` → status `Booting…` → `Ready`.
+2. Open `http://localhost:5173` → full-screen **dashboard** with live stats → **Enter Stage** boots 3D (`Ready` in the status pill).
 3. Chat → `hello` → see `llm_start` → streaming tokens → `tts_start` → audio + lip-sync (`a,i,u,e,o` at 60fps).
 4. `GET http://localhost:8000/api/wpkg/list` lists `.wpkg` files.
 

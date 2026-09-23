@@ -5,7 +5,7 @@
 > Interactive MMD waifu (Ellen / Jane / Zhu) with real-time AI chat, lip-synced TTS and physics.  
 > **Stack:** Three.js + MMDLoader + Bullet (`ammo.js`) · FastAPI + WebSockets · OpenRouter/Groq · Kokoro/ElevenLabs · 60fps viseme
 
-![Version](https://img.shields.io/badge/version-EU--0.3.9--01-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-3.11+-yellow) ![License](https://img.shields.io/badge/license-private-lightgrey)
+![Version](https://img.shields.io/badge/version-EU--0.4.0--01-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-3.11+-yellow) ![License](https://img.shields.io/badge/license-private-lightgrey)
 
 **Live:** Frontend `http://localhost:5173` proxies `/health` `/api/*` `/ws` → Backend `http://localhost:8000` via `waifu-viewer/vite.config.js:388`.
 
@@ -17,7 +17,11 @@
 - **Streaming AI** — `WS /ws/talk` → `llm_start/token/end` → `tts_start` → `viseme+audio` → `animation` → `done` with barge-in (`{"type":"stop"}`) — see `backend/app/ws/talk.py`
 - **LLM fallback** — OpenRouter primary (`google/gemini-2.0-flash-001` default, `poolside/laguna-s-2.1:free` example) → Groq fallback, offline mock if no keys
 - **TTS** — Kokoro local (offline sine mock if uninstalled) + ElevenLabs/Fish premium; per-character voices `ellen→af_sky/jf_alpha, jane→af_bella/jf_gongitsune, zhu→af_nicole/jf_sakura` (`backend/app/services/tts/voices.py`)
-- **WPKG** — `.wpkg` = STORE-zip character bundle (`packages/wpkg/src/index.js`, `spec v1 manifest`). Editor overlay at `waifu-viewer/src/editor/WpkgEditor.js` hits `GET /api/wpkg/*`
+- **WPKG** — `.wpkg` = STORE-zip character bundle (`packages/wpkg/src/index.js`, `spec v1 manifest`) with age ratings (`all`/`12`/`18`), tags and descriptions. Editor is an optional add-on (Settings → Extensions). Full guide: [WPKG.en.md](WPKG.en.md)
+- **Dashboard (Compangine)** — full-screen home with live stats: character/affinity, animation + background counts, backend/LLM-TTS status, benchmark tier. The 3D stage boots lazily on Enter
+- **Benchmark** — one-click PC test (setup step + Settings → App): CPU/GPU stress, RAM, WebGL2/3D-room support, TTS + backend; auto-tunes DPR/shadows/fps cap (`waifu-viewer/src/services/benchmark.js`)
+- **Extensions** — optional add-ons loaded on demand via dynamic import (registry `waifu-viewer/public/extensions.json`, local for testing). Mature (18+) packages stay blurred unless enabled (Settings → Extensions)
+- **Simple / Dev modes** — clean end-user UI by default; 🛠 Developer mode unlocks physics gravity, light fine-tune, camera damping and debug tools
 - **Desktop** — Electron wrapper `apps/desktop/electron/main.js` auto-spawns `uvicorn` (health-checks `:8000` → `:8001`)
 - **Backgrounds / VMD live-sync** — Vite plugins `vmdLiveSync()` + `backgroundsLiveSync()` serve `/api/vmd`, `/api/backgrounds`, `/backgrounds/*` with watch + HMR
 
@@ -103,27 +107,28 @@ Frontend stores affinity, graphics, and keys in `localStorage` (`waifu:affinity`
 ## Usage
 
 1. Start backend (`:8000`) and frontend (`:5173`).
-2. Open `http://localhost:5173` → **Menu → Characters** to pick Ellen/Jane/Zhu + outfit.
+2. Open `http://localhost:5173` → full-screen **dashboard** (in-app brand **Compangine**) shows live stats → **Enter Stage** boots the 3D scene → pick Ellen/Jane/Zhu + outfit.
 3. **Chat bar** → type message (or `/wave`, `/dance`, `/idle`, `/vmd <name>`) → streams LLM tokens + viseme lip-sync + audio. Press **Stop** or type while speaking to barge-in.
-4. **Settings (⚙ / Ctrl+,)** → Keys (OpenRouter/Groq/ElevenLabs/Fish), Graphics (DPR, shadows, FOV), App (physics, STT lang). Changes live-sync.
-5. **.wpkg Editor** (Panel → WPKG) → Import/Validate/Save `.wpkg` bundles. List served from `characters/*.wpkg` via `GET /api/wpkg/list`.
-6. **Backgrounds** (Panel → Scene → Background) → `backgrounds/` FBX/images, 3D rooms, Gradient/Solid. Drop files in `backgrounds/` — live without reload (dev) and persisted via `backgroundId`.
+4. **Settings (⚙ / Ctrl+,)** → Keys (OpenRouter/Groq/ElevenLabs/Fish), Graphics (presets, DPR, shadows, FOV), App (benchmark, backend, display), Extensions (add-ons, mature gate). Simple UI by default, 🛠 Dev reveals advanced. Changes live-sync.
+5. **.wpkg Editor** → install from **Settings → Extensions**, then Import/Validate/Save `.wpkg` bundles (ratings, tags, outfits). List served from `characters/*.wpkg` via `GET /api/wpkg/list`. See [WPKG.en.md](WPKG.en.md).
+6. **Backgrounds** (Panel → Look → Background) → `backgrounds/` FBX/images, 3D rooms, Gradient/Solid. Drop files in `backgrounds/` — live without reload (dev) and persisted via `backgroundId`.
 
 ---
 
 ## Project Structure
 
 ```
-waifu-viewer/         Vite + Three/MMD (src/main.js, services/waifu-client, morph-driver, tools, editor/WpkgEditor, settings/)
+waifu-viewer/         Vite + Three/MMD (src/main.js, services/{waifu-client,morph-driver,tools,benchmark,extensions,i18n}, settings/, editor/WpkgEditor as on-demand add-on)
 backend/app/          FastAPI (main.py, api/{health,chat,wpkg,memory,keys,settings,backgrounds,version}, ws/talk.py, services/{llm,tts,viseme,memory/stt}, config.py, models/schemas.py)
-packages/wpkg/        .wpkg pack/unpack (src/index.js, src/manifest.js, jszip STORE, 200MB limit, path-traversal guard)
+packages/wpkg/        .wpkg pack/unpack + ratings/tags validation (src/index.js, src/manifest.js, jszip STORE, 200MB limit, path-traversal guard)
 apps/desktop/         Electron (electron/main.js auto-starts uvicorn, preload.js bridge)
 characters/*.wpkg     Built bundles (174 MB)
 waifu-viewer/public/models/  Legacy PMX for direct boot (164 MB, mirrors characters)
+waifu-viewer/public/extensions.json  Add-on registry (local file for testing)
 backgrounds/          3D rooms + textures
 VMD_Animations/       Live VMD source (default_pose.vmd etc.)
 scripts/              pack-wpkg.mjs, convert-to-wpkg.mjs, version.mjs, watch-rebuild.mjs
-VERSION / version.json  App version (EU-0.3.9-01) synced to public/version.json + /api/version
+VERSION / version.json  App version (EU-0.4.0-01) synced to public/version.json + /api/version
 ```
 
 ---
@@ -135,6 +140,12 @@ No. Kokoro TTS works offline (sine mock if `kokoro` not installed) and the LLM r
 
 **Which LLM/TTS providers are supported?**
 LLM: OpenRouter (primary, `openrouter.py`) + Groq (fallback, `groq.py`) via `services/llm/factory.stream_with_fallback`. TTS: Kokoro (default, `services/tts/kokoro`), ElevenLabs, Fish (`factory.get_tts_for_request(premium)`). Set `TTS_PROVIDER` or toggle premium in Settings.
+
+**Where is the .wpkg editor?**
+It's an optional add-on since EU-0.4.0-01: **Settings → Extensions → WPKG Editor → Install**. It then loads on demand (separate chunk, not in the initial bundle). See [WPKG.en.md](WPKG.en.md).
+
+**How do I run the benchmark?**
+Setup runs it automatically (step 4), or anytime via **dashboard → Run benchmark** / **Settings → App → Run benchmark**. It grades CPU/GPU/RAM/WebGL2/TTS/backend and applies the matching DPR/shadow/fps-cap preset. Result is stored (`benchmarkTier`) and shown on the dashboard.
 
 **Where are secrets stored?**
 `backend/.env` (git-ignored), or Settings → Keys which `POST /api/keys` persists to `backend/user_keys.json` (also git-ignored) and hot-reloads `app.config.settings` without restart. Never commit `.env`/`user_keys.json`/`user_settings.json`.

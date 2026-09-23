@@ -3,8 +3,11 @@
  * but with its own namespace (settings-*). Mounts into #settingsRoot or body.
  * Wired to settings/store.js; main.js subscribes to apply live changes.
  */
-import { DEFAULTS, get, set, reset, exportJson, importJson, onChange } from './store.js'
+import { DEFAULTS, get, set, reset, exportJson, importJson, onChange, LIGHTING_PRESETS } from './store.js'
 import { fetchBackgrounds as fetchBgList } from '../services/background-manager.js'
+import { runBenchmark, applyRecommended, describeResult } from '../services/benchmark.js'
+import { fetchRegistry, isInstalled as isExtInstalled, installExtension, uninstallExtension } from '../services/extensions.js'
+import { t } from '../services/i18n.js'
 
 const FREE_MODELS = [
   { id:'google/gemini-2.0-flash-001', label:'Gemini 2.0 Flash (default · not free)' },
@@ -29,14 +32,15 @@ const FREE_MODELS = [
 ]
 
 const TABS = [
-  { id:'characters', label:'Characters' },
-  { id:'animation',  label:'Animation' },
-  { id:'physics',    label:'Physics & Motion' },
-  { id:'graphics',   label:'Graphics' },
-  { id:'camera',     label:'Camera' },
-  { id:'audio',      label:'Audio & Voice' },
-  { id:'keys',       label:'API Keys' },
-  { id:'app',        label:'App & Display' },
+  { id:'characters', label:'🎭 Characters' },
+  { id:'animation',  label:'🎬 Animation' },
+  { id:'physics',    label:'🌊 Physics' },
+  { id:'graphics',   label:'💡 Graphics' },
+  { id:'camera',     label:'📷 Camera' },
+  { id:'audio',      label:'🔊 Audio' },
+  { id:'keys',       label:'🔑 Keys' },
+  { id:'extensions', label:'🧩 Extensions' },
+  { id:'app',        label:'⚙ App' },
 ]
 
 export function mountSettingsModal(opts = {}){
@@ -58,11 +62,16 @@ export function mountSettingsModal(opts = {}){
 
   function render(){
     const s = get()
+    const dev = !!s.developerMode
     root.innerHTML = `
       <div class="settings-backdrop" data-close></div>
-      <div class="settings-modal" role="dialog" aria-modal="true" aria-label="Settings">
+      <div class="settings-modal${dev?' dev':''}" role="dialog" aria-modal="true" aria-label="Settings">
         <div class="settings-head">
           <h2>Settings</h2>
+          <div class="mode-seg" role="group" aria-label="Settings mode">
+            <button class="mode-btn ${!dev?'active':''}" data-act="dev-off" title="Hide advanced settings">Simple</button>
+            <button class="mode-btn ${dev?'active':''}" data-act="dev-on" title="Show advanced settings">🛠 Dev</button>
+          </div>
           <div class="settings-head-actions">
             <button class="btn ghost small" data-act="export">Export</button>
             <button class="btn ghost small" data-act="import">Import</button>
@@ -121,7 +130,7 @@ export function mountSettingsModal(opts = {}){
                 <h4>Simulation</h4>
                 <label class="check"><input type="checkbox" data-field="physics" ${s.physics?'checked':''}> Physics (hair / cloth)</label>
                 <label class="check"><input type="checkbox" data-field="ik" ${s.ik?'checked':''}> IK (feet / hands)</label>
-                <div class="settings-row"><label>Gravity <span data-bind="gravity">${s.gravity}</span>
+                <div class="settings-row" data-dev><label>Gravity <span data-bind="gravity">${s.gravity}</span>
                   <input type="range" min="-40" max="0" step="0.5" value="${s.gravity}" data-field="gravity"></label>
                 </div>
               </div>
@@ -145,23 +154,26 @@ export function mountSettingsModal(opts = {}){
                   <input type="range" min="0" max="2" step="0.05" value="${s.fillIntensity}" data-field="fillIntensity"></label></div>
                 <div class="settings-row"><label>Rim <span data-bind="rimIntensity">${s.rimIntensity.toFixed(1)}</span>
                   <input type="range" min="0" max="3" step="0.1" value="${s.rimIntensity}" data-field="rimIntensity"></label></div>
-                <div class="settings-row"><label>Back <span data-bind="backIntensity">${s.backIntensity.toFixed(2)}</span>
-                  <input type="range" min="0" max="2" step="0.05" value="${s.backIntensity}" data-field="backIntensity"></label></div>
-                <div class="settings-row"><label>Ambient <span data-bind="ambientIntensity">${s.ambientIntensity.toFixed(2)}</span>
-                  <input type="range" min="0" max="1.5" step="0.05" value="${s.ambientIntensity}" data-field="ambientIntensity"></label></div>
                 <div class="settings-row"><label>Exposure <span data-bind="exposure">${s.exposure.toFixed(2)}</span>
                   <input type="range" min="0.3" max="2" step="0.05" value="${s.exposure}" data-field="exposure"></label></div>
                 <div class="settings-row" style="gap:8px; flex-wrap:wrap">
                   <span style="font-size:12px; opacity:0.7; margin-right:6px">Presets:</span>
-                  <button class="btn btn-sm" data-preset="game" style="padding:4px 10px; font-size:12px">Game (ZZZ)</button>
-                  <button class="btn btn-sm" data-preset="villa" style="padding:4px 10px; font-size:12px">Villa</button>
-                  <button class="btn btn-sm" data-preset="studio" style="padding:4px 10px; font-size:12px">Studio</button>
+                  ${Object.entries(LIGHTING_PRESETS).map(([id,p])=>`<button class="btn btn-sm ${s.lightingPreset===id?'primary':''}" data-set-preset="${id}" style="padding:4px 10px; font-size:12px" title="${p.desc}">${p.label}</button>`).join('')}
                 </div>
+                <div class="settings-row" data-dev><label>Back <span data-bind="backIntensity">${s.backIntensity.toFixed(2)}</span>
+                  <input type="range" min="0" max="2" step="0.05" value="${s.backIntensity}" data-field="backIntensity"></label></div>
+                <div class="settings-row" data-dev><label>Ambient <span data-bind="ambientIntensity">${s.ambientIntensity.toFixed(2)}</span>
+                  <input type="range" min="0" max="1.5" step="0.05" value="${s.ambientIntensity}" data-field="ambientIntensity"></label></div>
+                <div class="settings-row" data-dev><label>Hemi (sky bounce) <span data-bind="hemiIntensity">${Number(s.hemiIntensity).toFixed(2)}</span>
+                  <input type="range" min="0" max="2.5" step="0.05" value="${s.hemiIntensity}" data-field="hemiIntensity"></label></div>
+                <div class="settings-row" data-dev><label>Face fill <span data-bind="faceIntensity">${Number(s.faceIntensity).toFixed(2)}</span>
+                  <input type="range" min="0" max="2" step="0.05" value="${s.faceIntensity}" data-field="faceIntensity"></label></div>
               </div>
-              <div class="settings-card">
+              <div class="settings-card" data-dev>
                 <h4>Quality</h4>
                 <label class="check"><input type="checkbox" data-field="shadows" ${s.shadows?'checked':''}> Shadows</label>
                 <label class="check"><input type="checkbox" data-field="ground" ${s.ground?'checked':''}> Ground / grid</label>
+                <label class="check"><input type="checkbox" data-field="autoQuality" ${s.autoQuality?'checked':''}> Auto quality (drop shadows if slow)</label>
                 <div class="settings-row"><label>DPR cap
                   <select data-field="dprCap">
                     <option value="auto" ${s.dprCap==='auto'?'selected':''}>Auto</option>
@@ -201,9 +213,9 @@ export function mountSettingsModal(opts = {}){
                 <div class="settings-row"><label>FOV <span data-bind="fov">${s.fov}°</span>
                   <input type="range" min="20" max="75" step="1" value="${s.fov}" data-field="fov"></label></div>
                 <label class="check"><input type="checkbox" data-field="autoRotate" ${s.autoRotate?'checked':''}> Auto orbit</label>
-                <div class="settings-row"><label>Damping <span data-bind="dampingFactor">${s.dampingFactor.toFixed(3)}</span>
+                <div class="settings-row" data-dev><label>Damping <span data-bind="dampingFactor">${s.dampingFactor.toFixed(3)}</span>
                   <input type="range" min="0.01" max="0.2" step="0.005" value="${s.dampingFactor}" data-field="dampingFactor"></label></div>
-                <div class="settings-row inline">
+                <div class="settings-row inline" data-dev>
                   <label>Min dist <input type="number" min="1" max="20" step="0.5" value="${s.minDistance}" data-field="minDistance"></label>
                   <label>Max dist <input type="number" min="10" max="80" step="1" value="${s.maxDistance}" data-field="maxDistance"></label>
                 </div>
@@ -244,9 +256,9 @@ export function mountSettingsModal(opts = {}){
                     <option value="jf_nezumi" ${s.ttsVoiceJa==='jf_nezumi'?'selected':''}>jf_nezumi</option>
                   </select></label></div>
                 <label class="check"><input type="checkbox" data-field="premium" ${s.premium?'checked':''}> Premium TTS</label>
-                <div class="settings-row"><label>Prosody rate <span data-bind="prosodyRate">${s.prosodyRate.toFixed(2)}</span>
+                <div class="settings-row" data-dev><label>Prosody rate <span data-bind="prosodyRate">${s.prosodyRate.toFixed(2)}</span>
                   <input type="range" min="0.7" max="1.4" step="0.05" value="${s.prosodyRate}" data-field="prosodyRate"></label></div>
-                <div class="settings-row"><label>Prosody pitch <span data-bind="prosodyPitch">${s.prosodyPitch}</span>
+                <div class="settings-row" data-dev><label>Prosody pitch <span data-bind="prosodyPitch">${s.prosodyPitch}</span>
                   <input type="range" min="-6" max="6" step="1" value="${s.prosodyPitch}" data-field="prosodyPitch"></label></div>
               </div>
               <div class="settings-card">
@@ -298,9 +310,38 @@ export function mountSettingsModal(opts = {}){
             </div>
           </div>
 
+          <div class="settings-panel ${activeTab==='extensions'?'active':''}" data-panel="extensions">
+            <h3>${t('ext.title')}</h3>
+            <div class="settings-card">
+              <h4>${t('ext.rating')}</h4>
+              <label class="check"><input type="checkbox" data-field="showMature" ${s.showMature?'checked':''}> ${t('ext.mature')}</label>
+              <div class="settings-hint" style="margin-bottom:0">${t('ext.matureHint')}</div>
+            </div>
+            <div class="settings-card" style="margin-top:10px">
+              <h4>${t('ext.available')}</h4>
+              <div id="setExtList"><div class="settings-hint" style="margin:0">${t('ext.loading')}</div></div>
+              <div class="settings-hint">${t('ext.registry')}</div>
+            </div>
+          </div>
+
           <div class="settings-panel ${activeTab==='app'?'active':''}" data-panel="app">
             <h3>App & Display</h3>
-            <div class="settings-grid">
+            <div class="settings-card">
+              <h4>Mode</h4>
+              <label class="check"><input type="checkbox" data-field="developerMode" ${s.developerMode?'checked':''}> 🛠 Developer mode — show advanced settings</label>
+              <div class="settings-hint" style="margin-bottom:0">Simple hides physics gravity, light fine-tune, camera damping, prosody and debug tools. Dev reveals them everywhere (drawer + here).</div>
+            </div>
+            <div class="settings-card" style="margin-top:10px">
+              <h4>${t('set.benchTitle')}</h4>
+              <div id="setBenchBox">
+                <div class="settings-hint" style="margin:0" id="setBenchStatus">${s.benchmarkTier ? t('set.benchLast', { tier: t('tier.' + s.benchmarkTier), date: s.benchmarkDate ? ` • ${s.benchmarkDate.slice(0,10)}` : '' }) : t('set.benchNever')}</div>
+                <div id="setBenchResults" style="margin-top:8px"></div>
+                <div class="settings-actions">
+                  <button class="btn small primary" data-act="bench-run">${t('set.benchRun')}</button>
+                </div>
+              </div>
+            </div>
+            <div class="settings-grid" style="margin-top:10px">
               <div class="settings-card">
                 <h4>Backend</h4>
                 <dl class="settings-kv" id="setBackendKv"><dt>Loading…</dt><dd></dd></dl>
@@ -308,7 +349,7 @@ export function mountSettingsModal(opts = {}){
                   <button class="btn small ghost" data-act="check-health">Check health</button>
                 </div>
               </div>
-              <div class="settings-card">
+              <div class="settings-card" data-dev>
                 <h4>Display</h4>
                 <dl class="settings-kv">
                   <dt>DPR</dt><dd id="setDprVal">—</dd>
@@ -321,7 +362,7 @@ export function mountSettingsModal(opts = {}){
                 </div>
               </div>
             </div>
-            <div class="settings-card" style="margin-top:10px">
+            <div class="settings-card" style="margin-top:10px" data-dev>
               <h4>Data</h4>
               <div class="settings-actions">
                 <button class="btn small ghost" data-act="export-json">Copy settings JSON</button>
@@ -339,6 +380,72 @@ export function mountSettingsModal(opts = {}){
     fillDynamic()
     syncAppTab()
     renderSettingsBg()
+    renderExtensions()
+  }
+
+  async function renderExtensions(){
+    const host = root.querySelector('#setExtList')
+    if(!host) return
+    let list = []
+    try{ list = await fetchRegistry() }catch{ list = [] }
+    if(!list.length){
+      host.innerHTML = `<div class="settings-hint" style="margin:0">${t('ext.regFail')}</div>`
+      return
+    }
+    host.innerHTML = list.map(e=>{
+      const installed = isExtInstalled(e.id)
+      return `<div class="ext-row">
+        <div class="ext-meta"><b>${e.name}</b><span>${e.description || ''}</span></div>
+        <span class="ext-ver">v${e.version || '?'}</span>
+        <button class="btn small ${installed ? 'ghost' : 'primary'}" data-ext-toggle="${e.id}">${installed ? t('ext.uninstall') : t('ext.install')}</button>
+      </div>`
+    }).join('')
+    host.querySelectorAll('[data-ext-toggle]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        const id = btn.dataset.extToggle
+        btn.disabled = true
+        btn.textContent = '…'
+        try{
+          if(isExtInstalled(id)){
+            uninstallExtension(id)
+            onAction({type:'toast', text: t('ext.uninstalled')})
+          } else {
+            await installExtension(id)
+            onAction({type:'field', field:'extensions', value: get().extensions})
+            onAction({type:'toast', text: t('ext.installed')})
+          }
+        }catch(err){
+          onAction({type:'toast', text: t('ext.failed', { e: err?.message || err })})
+        }
+        renderExtensions()
+      })
+    })
+  }
+
+  let _benchRunning = false
+  async function runSettingsBenchmark(){
+    if(_benchRunning) return
+    _benchRunning = true
+    const st = root.querySelector('#setBenchStatus')
+    const box = root.querySelector('#setBenchResults')
+    const btn = root.querySelector('[data-act="bench-run"]')
+    try{
+      if(st) st.innerHTML = t('set.benchTestingSub')
+      if(btn){ btn.disabled = true; btn.textContent = t('set.benchTesting') }
+      if(box) box.innerHTML = ''
+      const res = await runBenchmark()
+      applyRecommended(res)
+      onAction({type:'field', field:'benchmarkTier', value: res.tier})
+      if(st) st.innerHTML = t('set.benchResult', { tier: t('tier.' + res.tier), score: res.score, desc: t('tierd.' + res.tier) })
+      if(box) box.innerHTML = `<dl class="settings-kv">${describeResult(res).map(r =>
+        `<dt>${r.label}</dt><dd><span class="bench-${r.status}">●</span> ${r.value}</dd>`).join('')}</dl>`
+      onAction({type:'toast', text: t('set.benchToast', { tier: t('tier.' + res.tier) })})
+    }catch(e){
+      if(st) st.textContent = t('set.benchFail', { e: e?.message || e })
+    }finally{
+      _benchRunning = false
+      if(btn){ btn.disabled = false; btn.textContent = t('set.benchRun') }
+    }
   }
 
   function fillDynamic(){
@@ -546,6 +653,7 @@ export function mountSettingsModal(opts = {}){
         if(activeTab==='app') syncAppTab()
         if(activeTab==='keys') syncKeysTab()
         if(activeTab==='graphics') renderSettingsBg()
+        if(activeTab==='extensions') renderExtensions()
       })
     })
     // keyboard nav for tabs
@@ -583,11 +691,12 @@ export function mountSettingsModal(opts = {}){
           if(field==='affinity') bind.textContent = Number(v).toFixed(2)
           else if(field==='speed') bind.textContent = Number(v).toFixed(2)+'×'
           else if(['keyIntensity','rimIntensity'].includes(field)) bind.textContent = Number(v).toFixed(1)
-          else if(['fillIntensity','backIntensity','ambientIntensity','exposure','prosodyRate'].includes(field)) bind.textContent = Number(v).toFixed(2)
+          else if(['fillIntensity','backIntensity','ambientIntensity','exposure','prosodyRate','hemiIntensity','faceIntensity'].includes(field)) bind.textContent = Number(v).toFixed(2)
           else bind.textContent = String(v)
         }
         // notify host for live effects
         onAction({ type:'field', field, value: v })
+        if(field==='developerMode'){ render(); return }
         if(field==='modelId' || field==='animId'){
           fillDynamic()
         }
@@ -618,21 +727,23 @@ export function mountSettingsModal(opts = {}){
       const txt = await f.text()
       try{ importJson(txt); render(); showImportStatus('Imported ♡ — applied'); onAction({type:'settingsImported'}) }catch(err){ showImportStatus('Import failed: '+err.message) }
     })
-    // lighting presets — Game (ZZZ) vs Villa vs Studio
-    root.querySelectorAll('[data-preset]').forEach(btn=>{
+    // lighting presets — shared LIGHTING_PRESETS, applied by host (main.js)
+    root.querySelectorAll('[data-set-preset]').forEach(btn=>{
       btn.addEventListener('click', ()=>{
-        const p = btn.dataset.preset
-        const presets = {
-          game:  { keyIntensity:1.45, fillIntensity:0.68, rimIntensity:0.92, backIntensity:0.22, ambientIntensity:0.78, exposure:1.08 },
-          villa: { keyIntensity:1.10, fillIntensity:0.42, rimIntensity:0.38, backIntensity:0.18, ambientIntensity:0.58, exposure:0.96 },
-          studio:{ keyIntensity:1.60, fillIntensity:0.85, rimIntensity:1.10, backIntensity:0.30, ambientIntensity:0.85, exposure:1.12 },
-        }
-        const preset = presets[p]
-        if(!preset) return
-        set(preset)
-        render()
-        onAction({type:'toast', text:`Lighting: ${p} preset applied`})
+        onAction({ type:'preset', id: btn.dataset.setPreset })
+        setTimeout(render, 80) // re-render to flip active pill + slider values
       })
+    })
+    root.querySelector('[data-act="dev-on"]')?.addEventListener('click', ()=>{
+      set({ developerMode: true })
+      onAction({ type:'field', field:'developerMode', value:true })
+      render()
+      onAction({type:'toast', text:'Developer mode ON 🛠'})
+    })
+    root.querySelector('[data-act="dev-off"]')?.addEventListener('click', ()=>{
+      set({ developerMode: false })
+      onAction({ type:'field', field:'developerMode', value:false })
+      render()
     })
     root.querySelector('[data-act="reset-all"]')?.addEventListener('click', ()=>{
       if(!confirm('Reset all settings to defaults?')) return
@@ -652,6 +763,7 @@ export function mountSettingsModal(opts = {}){
     root.querySelector('[data-act="cam-top"]')?.addEventListener('click', ()=> onAction({type:'cam', preset:'top'}))
     root.querySelector('[data-act="reset-camera"]')?.addEventListener('click', ()=> onAction({type:'resetCamera'}))
     root.querySelector('[data-act="check-health"]')?.addEventListener('click', ()=> syncAppTab())
+    root.querySelector('[data-act="bench-run"]')?.addEventListener('click', runSettingsBenchmark)
     root.querySelector('[data-act="check-keys"]')?.addEventListener('click', ()=> syncKeysTab())
     root.querySelector('[data-act="save-keys"]')?.addEventListener('click', ()=> saveKeysToBackend())
     root.querySelectorAll('[data-act="toggle-key"]').forEach(btn=>{

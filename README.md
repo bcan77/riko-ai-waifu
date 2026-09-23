@@ -5,7 +5,7 @@
 > Gerçek zamanlı AI sohbet, dudak senkronlu TTS ve fizikli interaktif MMD waifu (Ellen / Jane / Zhu).  
 > **Teknolojiler:** Three.js + MMDLoader + Bullet (`ammo.js`) · FastAPI + WebSockets · OpenRouter/Groq · Kokoro/ElevenLabs · 60fps viseme
 
-![Version](https://img.shields.io/badge/version-EU--0.3.9--01-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-3.11+-yellow) ![License](https://img.shields.io/badge/license-private-lightgrey)
+![Version](https://img.shields.io/badge/version-EU--0.4.0--01-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-3.11+-yellow) ![License](https://img.shields.io/badge/license-private-lightgrey)
 
 **Canlı:** Frontend `http://localhost:5173` → `/health` `/api/*` `/ws` isteklerini `waifu-viewer/vite.config.js:388` üzerinden Backend `http://localhost:8000` adresine proxy'ler.
 
@@ -17,7 +17,11 @@
 - **Akışkan AI** — `WS /ws/talk` → `llm_start/token/end` → `tts_start` → `viseme+audio` → `animation` → `done` ve barge-in (`{"type":"stop"}`) — bkz. `backend/app/ws/talk.py`
 - **LLM yedek sistemi** — OpenRouter birincil (`google/gemini-2.0-flash-001` varsayılan, `poolside/laguna-s-2.1:free` örneği) → Groq yedek, anahtar yoksa çevrimdışı sahte mod
 - **TTS** — Kokoro yerel (kurulu değilse çevrimdışı sine sahte) + ElevenLabs/Fish premium; karakter başına sesler `ellen→af_sky/jf_alpha, jane→af_bella/jf_gongitsune, zhu→af_nicole/jf_sakura` (`backend/app/services/tts/voices.py`)
-- **WPKG** — `.wpkg` = STORE-zip karakter paketi (`packages/wpkg/src/index.js`, `spec v1 manifest`). Editor `waifu-viewer/src/editor/WpkgEditor.js` üzerinden `GET /api/wpkg/*` istekleri
+- **WPKG** — `.wpkg` = STORE-zip karakter paketi (`packages/wpkg/src/index.js`, `spec v1 manifest`), yaş dereceli (`all`/`12`/`18`), etiketli ve açıklamalı. Editör opsiyonel eklentidir (Ayarlar → Eklentiler). Tam kılavuz: [WPKG.md](WPKG.md)
+- **Panel (Compangine)** — canlı istatistikli tam ekran ana sayfa: karakter/yakınlık, animasyon + arkaplan sayıları, backend/LLM-TTS durumu, test kademesi. 3D sahne Gir’e basınca tembel başlar
+- **Test (Benchmark)** — tek tık PC testi (kurulum 4. adım + Ayarlar → Uygulama): CPU/GPU stresi, RAM, WebGL2/3D-oda desteği, TTS + backend; DPR/gölge/fps sınırını otomatik ayarlar (`waifu-viewer/src/services/benchmark.js`)
+- **Eklentiler** — ihtiyaç anında yüklenen opsiyonel eklentiler (kayıt `waifu-viewer/public/extensions.json`, test için yerel). 18+ paketler açılmadan bulanık kalır (Ayarlar → Eklentiler)
+- **Basit / Geliştirici modları** — varsayılan sade son kullanıcı arayüzü; 🛠 Geliştirici modu fizik yerçekimi, ışık ince ayarı, kamera sönümü ve hata ayıklama araçlarını açar
 - **Masaüstü** — Electron sarmalayıcı `apps/desktop/electron/main.js` otomatik `uvicorn` başlatır (sağlık kontrolü `:8000` → `:8001`)
 - **Arkaplan / VMD canlı senkron** — Vite eklentileri `vmdLiveSync()` + `backgroundsLiveSync()` ile `/api/vmd`, `/api/backgrounds`, `/backgrounds/*` izleme + HMR desteği
 
@@ -103,27 +107,28 @@ Frontend yakınlık (affinity), grafik ve anahtarları `localStorage` içinde sa
 ## Kullanım
 
 1. Backend (`:8000`) ve frontend (`:5173`) başlat.
-2. `http://localhost:5173` aç → **Menü → Karakterler** ile Ellen/Jane/Zhu + kıyafet seç.
+2. `http://localhost:5173` aç → canlı istatistikli tam ekran **panel** (uygulama içi marka **Compangine**) → **Sahneye Gir** 3D sahneyi başlatır → Ellen/Jane/Zhu + kıyafet seç.
 3. **Sohbet çubuğu** → mesaj yaz (veya `/wave`, `/dance`, `/idle`, `/vmd <isim>`) → LLM tokenleri + viseme dudak senkronu + ses akışı. **Durdur** tuşuna bas veya konuşurken yazarak barge-in yap.
-4. **Ayarlar (⚙ / Ctrl+,)** → Anahtarlar (OpenRouter/Groq/ElevenLabs/Fish), Grafikler (DPR, gölgeler, FOV), Uygulama (fizik, STT dili, **Dil / Language**). Değişiklikler anında uygulanır.
-5. **.wpkg Editörü** (Panel → WPKG) → `.wpkg` paketlerini İçe aktar/Doğrula/Kaydet. Liste `characters/*.wpkg` üzerinden `GET /api/wpkg/list` ile sunulur.
-6. **Arkaplanlar** (Panel → Scene → Background) → `backgrounds/` FBX/resimler, 3D odalar, Gradient/Solid. Dosyaları `backgrounds/` içine at — yeniden yüklemeden canlı görünür (dev) ve `backgroundId` ile kalıcı olur.
+4. **Ayarlar (⚙ / Ctrl+,)** → Anahtarlar (OpenRouter/Groq/ElevenLabs/Fish), Grafikler (hazır ayarlar, DPR, gölgeler, FOV), Uygulama (test, backend, ekran), Eklentiler (eklentiler, yetişkin filtresi). Varsayılan sade arayüz, 🛠 Geliştirici modunda gelişmiş ayarlar. Değişiklikler anında uygulanır.
+5. **.wpkg Editörü** → **Ayarlar → Eklentiler**’den kur, sonra `.wpkg` paketlerini İçe aktar/Doğrula/Kaydet (derece, etiket, kostüm). Liste `characters/*.wpkg` üzerinden `GET /api/wpkg/list` ile sunulur. Bkz. [WPKG.md](WPKG.md).
+6. **Arkaplanlar** (Panel → Bak → Arkaplan) → `backgrounds/` FBX/resimler, 3D odalar, Gradient/Solid. Dosyaları `backgrounds/` içine at — yeniden yüklemeden canlı görünür (dev) ve `backgroundId` ile kalıcı olur.
 
 ---
 
 ## Proje Yapısı
 
 ```
-waifu-viewer/         Vite + Three/MMD (src/main.js, services/waifu-client, morph-driver, tools, editor/WpkgEditor, settings/)
+waifu-viewer/         Vite + Three/MMD (src/main.js, services/{waifu-client,morph-driver,tools,benchmark,extensions,i18n}, settings/, editor/WpkgEditor ihtiyaç anında yüklenen eklenti)
 backend/app/          FastAPI (main.py, api/{health,chat,wpkg,memory,keys,settings,backgrounds,version}, ws/talk.py, services/{llm,tts,viseme,memory/stt}, config.py, models/schemas.py)
-packages/wpkg/        .wpkg paketleme/açma (src/index.js, src/manifest.js, jszip STORE, 200MB limit, path-traversal koruması)
+packages/wpkg/        .wpkg paketleme/açma + derece/etiket doğrulama (src/index.js, src/manifest.js, jszip STORE, 200MB limit, path-traversal koruması)
 apps/desktop/         Electron (electron/main.js uvicorn'u otomatik başlatır, preload.js köprüsü)
 characters/*.wpkg     Derlenmiş paketler (174 MB)
 waifu-viewer/public/models/  Doğrudan başlatma için legacy PMX (164 MB, characters ile aynı)
+waifu-viewer/public/extensions.json  Eklenti kaydı (test için yerel dosya)
 backgrounds/          3D odalar + dokular
 VMD_Animations/       Canlı VMD kaynağı (default_pose.vmd vb.)
 scripts/              pack-wpkg.mjs, convert-to-wpkg.mjs, version.mjs, watch-rebuild.mjs
-VERSION / version.json  Uygulama sürümü (EU-0.3.9-01) public/version.json + /api/version ile senkron
+VERSION / version.json  Uygulama sürümü (EU-0.4.0-01) public/version.json + /api/version ile senkron
 ```
 
 ---
@@ -138,6 +143,12 @@ LLM: OpenRouter (birincil, `openrouter.py`) + Groq (yedek, `groq.py`) via `servi
 
 **Gizli anahtarlar nerede saklanıyor?**
 `backend/.env` (git'te yok sayılır), veya Ayarlar → Anahtarlar ile `POST /api/keys` → `backend/user_keys.json` (o da git'te yok) ve `app.config.settings` yeniden başlatmadan hot-reload olur. `.env`/`user_keys.json`/`user_settings.json` asla commit'leme.
+
+**.wpkg editörü nerede?**
+EU-0.4.0-01’den beri opsiyonel eklenti: **Ayarlar → Eklentiler → WPKG Editor → Kur**. Sonra ihtiyaç anında yüklenir (ayrı parça, ilk pakete dahil değil). Bkz. [WPKG.md](WPKG.md).
+
+**Test nasıl çalıştırılır?**
+Kurulumda otomatik çalışır (4. adım), veya istediğin zaman **panel → Testi çalıştır** / **Ayarlar → Uygulama → Testi çalıştır**. CPU/GPU/RAM/WebGL2/TTS/backend’i puanlar ve uygun DPR/gölge/fps-sınırı hazır ayarını uygular. Sonuç saklanır (`benchmarkTier`) ve panelde görünür.
 
 **Neden `characters/*.wpkg` ve `public/models` ikisi de büyük?**
 İkisi de açılış için gerekli: legacy `public/models` → `/models/Ellen Joe/艾莲.pmx` doğrudan yükleme, ve `.wpkg` paketleri uygulama içi WPKG sistemi için. Repoyu küçültmek için Git LFS aktif et veya `.gitignore` içindeki yorum satırlarını açıp `npm run convert` ile yerel `MMD_Models_MiHoyo/` kaynağından yeniden oluştur (dahil değil).

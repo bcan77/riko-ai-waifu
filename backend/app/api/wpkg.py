@@ -11,7 +11,18 @@ def _list_wpkg():
     out=[]
     for p in WPKG_DIR.glob("*.wpkg"):
         st=p.stat()
-        out.append({"file":p.name,"size":st.st_size,"mtime":st.st_mtime})
+        entry={"file":p.name,"size":st.st_size,"mtime":st.st_mtime,"rating":"all","name":p.stem}
+        # peek manifest for rating/name (cheap — manifest.json is tiny)
+        try:
+            import zipfile
+            with zipfile.ZipFile(p,'r') as z:
+                if "manifest.json" in z.namelist():
+                    man=json.load(z.open("manifest.json"))
+                    if man.get("rating") in ("all","12","18"): entry["rating"]=man["rating"]
+                    if isinstance(man.get("name"), str) and man["name"]: entry["name"]=man["name"]
+        except Exception:
+            pass
+        out.append(entry)
     return sorted(out, key=lambda x:x["file"])
 
 @router.get("/list")
@@ -41,6 +52,11 @@ async def wpkg_info(file: str):
                 alt=os.path.join(tmp,'prompts','system.md')
                 if os.path.exists(alt): sys_prompt=open(alt,encoding='utf-8',errors='ignore').read()[:2000]
         man["prompts"]={**man.get("prompts",{}),"system":sys_prompt}
+        # content metadata defaults for packages created before ratings existed
+        if man.get("rating") not in ("all","12","18"): man["rating"]="all"
+        if not isinstance(man.get("tags"), list): man["tags"]=[]
+        if not isinstance(man.get("content_flags"), list): man["content_flags"]=[]
+        if not isinstance(man.get("description"), str): man["description"]=""
         # expose outfits info: include resolved count
         if "outfits" not in man and man.get("model",{}).get("entry"):
             man["outfits"] = [{"id":"default","name":"Default","entry":man["model"]["entry"]}]
@@ -54,6 +70,20 @@ async def wpkg_validate(payload: dict):
     if payload.get("spec")!=1: errs.append("spec must be 1")
     if not payload.get("id"): errs.append("id required")
     if not payload.get("name"): errs.append("name required")
+    # content metadata — ratings + tags
+    if payload.get("rating") is not None and payload.get("rating") not in ("all","12","18"):
+        errs.append("rating must be one of: all, 12, 18")
+    tags = payload.get("tags")
+    if tags is not None:
+        if not isinstance(tags, list): errs.append("tags must be array")
+        elif len(tags) > 24: errs.append("tags max 24")
+    flags = payload.get("content_flags")
+    if flags is not None:
+        if not isinstance(flags, list): errs.append("content_flags must be array")
+        elif len(flags) > 12: errs.append("content_flags max 12")
+    desc = payload.get("description")
+    if desc is not None and (not isinstance(desc, str) or len(desc) > 2000):
+        errs.append("description max 2000 chars")
     # outfits validation
     outfits = payload.get("outfits")
     if outfits is not None:
@@ -142,6 +172,10 @@ async def wpkg_create(payload: dict):
                 "prompts":{"system_file":"prompts/system.md"},
                 "motions":{"idle": payload.get("motions",{}).get("idle", existing_man.get("motions",{}).get("idle")), "gestures": existing_man.get("motions",{}).get("gestures",{})},
                 "affinity": payload.get("affinity", existing_man.get("affinity",0.5)),
+                "rating": payload.get("rating", existing_man.get("rating","all")),
+                "tags": payload.get("tags", existing_man.get("tags",[])),
+                "content_flags": payload.get("content_flags", existing_man.get("content_flags",[])),
+                "description": payload.get("description", existing_man.get("description","")),
                 "created_at": payload.get("created_at", existing_man.get("created_at","2026-09-03"))
             }
             # outfits support

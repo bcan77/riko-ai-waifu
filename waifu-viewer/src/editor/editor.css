@@ -16,6 +16,15 @@
 .wpkg-item:hover{border-color:rgba(148,163,184,0.14);background:rgba(148,163,184,0.08);transform:translateX(2px)}
 .wpkg-item b{font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .wpkg-item small{color:var(--muted);font-size:11px}
+/* age rating badges + mature lock */
+.rating-badge{display:inline-block;font-size:9px;font-weight:800;letter-spacing:.06em;padding:2px 7px;border-radius:999px;border:1px solid;margin-left:6px;vertical-align:1px}
+.rating-badge.r-all{background:rgba(74,222,128,.12);border-color:rgba(74,222,128,.35);color:#86efac}
+.rating-badge.r-12{background:rgba(250,204,21,.12);border-color:rgba(250,204,21,.35);color:#fde047}
+.rating-badge.r-18{background:rgba(248,113,113,.14);border-color:rgba(248,113,113,.4);color:#fca5a5}
+.wpkg-item.locked{opacity:.75;border-style:dashed}
+.wpkg-item.locked b{filter:blur(3px);user-select:none}
+.wpkg-item .lock-note{color:#fca5a5!important}
+.wpkg-item .file-note{opacity:.6;font-family:JetBrains Mono,monospace;font-size:10px}
 .wpkg-preview{font-size:12px;line-height:1.6;min-height:120px;background:rgba(2,6,16,0.38);border:1px solid rgba(148,163,184,0.08);border-radius:10px;padding:12px;overflow:auto}
 .wpkg-col label{display:flex;flex-direction:column;gap:6px;margin:10px 0;font-size:10px;color:var(--muted);font-weight:700;letter-spacing:0.05em;text-transform:uppercase}
 .wpkg-col input,.wpkg-col select,.wpkg-col textarea{padding:9px 10px;border-radius:10px;border:1px solid var(--line);background:rgba(148,163,184,0.07);color:var(--text);font-size:13px;font-weight:500;letter-spacing:0;text-transform:none;min-width:0}

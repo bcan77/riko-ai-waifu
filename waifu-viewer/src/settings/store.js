@@ -5,7 +5,15 @@
  */
 
 export const DEFAULTS = {
-  version: 11,
+  version: 13,
+  // UX mode — false = clean end-user surface, true = expose advanced tunables
+  developerMode: false,
+  // Add-ons (installable extensions, e.g. wpkg-editor) + content gating
+  extensions: { 'wpkg-editor': false },
+  showMature: false, // reveal 18+ rated .wpkg packages
+  // Benchmark — last auto-tuning result
+  benchmarkTier: null, // null | 'excellent' | 'good' | 'basic'
+  benchmarkDate: '',
   // i18n
   language: 'en', // 'en' | 'tr'
   // Characters
@@ -31,12 +39,16 @@ export const DEFAULTS = {
   eyeTracking: true,
   hitboxing: true,
   // Graphics — game-like (ZZZ/Genshin high-key anime: bright fill, strong rim, even ambient)
+  lightingPreset: 'game', // 'game' | 'villa' | 'studio' | 'night' — applying a preset writes the intensities below
   keyIntensity: 1.45,
   fillIntensity: 0.68,
   rimIntensity: 0.92,
   backIntensity: 0.22,
   ambientIntensity: 0.78,
+  hemiIntensity: 1.05,
+  faceIntensity: 0.55,
   exposure: 1.08,
+  autoQuality: true, // auto step-down DPR/shadows if fps sags
   shadows: true,
   ground: true,
   dprCap: 'auto',          // 'auto' | '1.25' | '1.5' | '1.75' | '2'
@@ -66,6 +78,17 @@ export const DEFAULTS = {
   backgroundBlur: 0,
 }
 
+/**
+ * Shared lighting presets — single source of truth for drawer + settings.
+ * Each preset drives the 7 intensities + exposure + key/rim color temperature.
+ */
+export const LIGHTING_PRESETS = {
+  game:   { label: 'Game',   desc: 'ZZZ high-key anime', keyIntensity: 1.45, fillIntensity: 0.68, rimIntensity: 0.92, backIntensity: 0.22, ambientIntensity: 0.78, hemiIntensity: 1.05, faceIntensity: 0.55, exposure: 1.08, keyColor: 0xfff6e8, rimColor: 0xffdfb5 },
+  villa:  { label: 'Villa',  desc: 'Warm cozy interior', keyIntensity: 1.10, fillIntensity: 0.42, rimIntensity: 0.38, backIntensity: 0.18, ambientIntensity: 0.58, hemiIntensity: 0.85, faceIntensity: 0.45, exposure: 0.96, keyColor: 0xffe9c8, rimColor: 0xffc98a },
+  studio: { label: 'Studio', desc: 'Soft neutral softbox', keyIntensity: 1.60, fillIntensity: 0.85, rimIntensity: 1.10, backIntensity: 0.30, ambientIntensity: 0.85, hemiIntensity: 1.15, faceIntensity: 0.65, exposure: 1.12, keyColor: 0xffffff, rimColor: 0xe8f0ff },
+  night:  { label: 'Night',  desc: 'Cool moonlit pop',  keyIntensity: 0.90, fillIntensity: 0.35, rimIntensity: 1.35, backIntensity: 0.40, ambientIntensity: 0.42, hemiIntensity: 0.60, faceIntensity: 0.50, exposure: 1.00, keyColor: 0xd8e8ff, rimColor: 0x7dd3fc },
+}
+
 const STORAGE_KEY = 'waifu:settings'
 const FILE_ENDPOINT = '/api/settings'
 let _fileSaveTimer = null
@@ -76,6 +99,14 @@ function sanitize(raw){
   const o = {}
   // version
   o.version = Number(raw.version) || DEFAULTS.version
+  // ux mode
+  o.developerMode = !!raw.developerMode
+  // extensions — known add-on flags only (unknown keys dropped)
+  o.extensions = { 'wpkg-editor': !!(raw.extensions && raw.extensions['wpkg-editor']) }
+  o.showMature = !!raw.showMature
+  // benchmark
+  o.benchmarkTier = ['excellent','good','basic'].includes(raw.benchmarkTier) ? raw.benchmarkTier : null
+  o.benchmarkDate = typeof raw.benchmarkDate === 'string' ? raw.benchmarkDate.slice(0, 24) : ''
   // i18n
   o.language = ['en','tr'].includes(raw.language) ? raw.language : DEFAULTS.language
   // characters
@@ -95,12 +126,16 @@ function sanitize(raw){
   o.eyeTracking = raw.eyeTracking !== false
   o.hitboxing = raw.hitboxing !== false
   // graphics
+  o.lightingPreset = LIGHTING_PRESETS[raw.lightingPreset] ? raw.lightingPreset : DEFAULTS.lightingPreset
   o.keyIntensity = clamp(parseFloat(raw.keyIntensity ?? DEFAULTS.keyIntensity), 0, 5)
   o.fillIntensity = clamp(parseFloat(raw.fillIntensity ?? DEFAULTS.fillIntensity), 0, 2)
   o.rimIntensity = clamp(parseFloat(raw.rimIntensity ?? DEFAULTS.rimIntensity), 0, 3)
   o.backIntensity = clamp(parseFloat(raw.backIntensity ?? DEFAULTS.backIntensity), 0, 2)
   o.ambientIntensity = clamp(parseFloat(raw.ambientIntensity ?? DEFAULTS.ambientIntensity), 0, 1.5)
+  o.hemiIntensity = clamp(parseFloat(raw.hemiIntensity ?? DEFAULTS.hemiIntensity), 0, 2.5)
+  o.faceIntensity = clamp(parseFloat(raw.faceIntensity ?? DEFAULTS.faceIntensity), 0, 2)
   o.exposure = clamp(parseFloat(raw.exposure ?? DEFAULTS.exposure), 0.3, 2)
+  o.autoQuality = raw.autoQuality !== false
   o.shadows = raw.shadows !== false
   o.ground = raw.ground !== false
   o.dprCap = ['auto','1.25','1.5','1.75','2'].includes(String(raw.dprCap)) ? String(raw.dprCap) : DEFAULTS.dprCap
@@ -215,6 +250,23 @@ export function load(){
   // migrate v10 → v11: add language
   if ((clean.version||0) < 11) {
     if(!['en','tr'].includes(clean.language)) clean.language = DEFAULTS.language
+    clean.version = 11
+  }
+  // migrate v11 → v12: developer mode + preset-driven lighting (hemi/face/autoQuality)
+  if ((clean.version||0) < 12) {
+    if (typeof clean.developerMode !== 'boolean') clean.developerMode = DEFAULTS.developerMode
+    if (!LIGHTING_PRESETS[clean.lightingPreset]) clean.lightingPreset = DEFAULTS.lightingPreset
+    if (typeof clean.hemiIntensity !== 'number') clean.hemiIntensity = DEFAULTS.hemiIntensity
+    if (typeof clean.faceIntensity !== 'number') clean.faceIntensity = DEFAULTS.faceIntensity
+    if (typeof clean.autoQuality !== 'boolean') clean.autoQuality = DEFAULTS.autoQuality
+    clean.version = 12
+  }
+  // migrate v12 → v13: extensions + mature gate + benchmark tier
+  if ((clean.version||0) < 13) {
+    if (!clean.extensions || typeof clean.extensions !== 'object') clean.extensions = { ...DEFAULTS.extensions }
+    if (typeof clean.showMature !== 'boolean') clean.showMature = DEFAULTS.showMature
+    if (!['excellent','good','basic',null].includes(clean.benchmarkTier)) clean.benchmarkTier = null
+    if (typeof clean.benchmarkDate !== 'string') clean.benchmarkDate = ''
     clean.version = DEFAULTS.version
   }
   _cache = clean
