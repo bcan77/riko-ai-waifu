@@ -33,6 +33,38 @@ _OPENROUTER_FALLBACK_MODELS = [
     "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free",
 ]
 
+TOOL_DECISION_NUDGE = (
+    "Tool-use check (reply with tool calls or nothing else): you have function tools "
+    "get_time, get_date, calculator, cloud_list_files, cloud_read_file, cloud_search, "
+    "memory_search, trigger_morph, play_vmd, set_prosody. "
+    "Call a tool ONLY if the latest user message needs live facts, math, time/date, "
+    "or Neural Cloud file contents. Otherwise call no tools."
+)
+
+async def decide_tools(messages: list[dict], model_override: str | None = None, max_calls: int = 4) -> list[dict]:
+    """One cheap non-streamed pass: which tools (if any) does this turn need?"""
+    primary, fallback = get_llm_providers(model_override=model_override)
+    if primary is None and fallback is None:
+        return []
+    from app.services.tools.registry import CHAT_TOOLS
+    probe = list(messages) + [{"role": "system", "content": TOOL_DECISION_NUDGE}]
+    for provider in (primary, fallback):
+        if provider is None:
+            continue
+        try:
+            calls = await provider.complete_with_tools(probe, CHAT_TOOLS)
+            out = []
+            for c in calls or []:
+                if c.get("name"):
+                    out.append({"id": c.get("id") or c["name"], "name": c["name"],
+                                "args": c.get("args") if isinstance(c.get("args"), dict) else {}})
+                if len(out) >= max_calls:
+                    break
+            return out
+        except Exception:
+            continue
+    return []
+
 async def stream_with_fallback(messages: list[dict], model_override: str | None = None) -> AsyncIterator[str]:
     """
     Streams from primary (OpenRouter), on failure/timeout falls back to Groq,

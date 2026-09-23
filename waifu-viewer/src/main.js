@@ -9,6 +9,7 @@ import { WaifuClient } from './services/waifu-client.js'
 import { createMorphDriver } from './services/morph-driver.js'
 import { syncExtensionBody, isInstalled as isExtInstalled, installExtension, getEditorHandle } from './services/extensions.js'
 import { t } from './services/i18n.js'
+import { initCloudView } from './services/cloud-view.js'
 import './editor/editor.css'
 import './settings/settings.css'
 import { load as loadSettings, get as getSettings, getRaw as getSettingsRaw, set as setSettings, onChange as onSettingsChange, DEFAULTS as SETTINGS_DEFAULTS, LIGHTING_PRESETS, isOnboarded, setOnboarded } from './settings/store.js'
@@ -1971,8 +1972,12 @@ if(import.meta.hot){
 let bootStarted = false
 let bootPromise = null
 function setScreen(name){
-  document.body.dataset.screen = name === 'stage' ? 'stage' : 'dashboard'
-  if(name === 'dashboard') refreshDashboard()
+  const next = name === 'stage' ? 'stage' : name === 'cloud' ? 'cloud' : 'dashboard'
+  document.body.dataset.screen = next
+  if(next === 'dashboard') refreshDashboard()
+  if(next === 'cloud' && window.__cloudRefresh){
+    try{ window.__cloudRefresh() }catch{}
+  }
 }
 /** Static dashboard chrome in the user's language (dynamic numbers handled by refreshDashboard). */
 function applyDashboardI18n(){
@@ -1990,6 +1995,7 @@ function applyDashboardI18n(){
   set('btnDashWpkg', 'dash.wpkg')
   set('btnDashKeys', 'dash.keys')
   set('btnDashBench2', 'dash.runBench')
+  set('btnDashCloud', 'cv.openMesh')
   setHtml('dashSubtitle', getSettingsRaw().onboarded ? 'dash.subReady' : 'dash.subNew')
   setHtml('dashFootTip', 'dash.foot')
 }
@@ -2059,6 +2065,16 @@ async function refreshDashboard(){
     const pEl = document.getElementById('dashProviders')
     if(pEl) pEl.textContent = t('dash.offline')
   }
+  // neural cloud node count (best effort)
+  try{
+    const r = await fetch('/api/cloud/files', { cache: 'no-store' })
+    if(r.ok){
+      const j = await r.json()
+      const n = (j.files || []).length
+      const cEl = document.getElementById('dashCloudMeta')
+      if(cEl) cEl.textContent = n ? t('cv.nodes', { n }) : t('cv.empty')
+    }
+  }catch{}
 }
 async function enterStage(){
   setScreen('stage')
@@ -2092,6 +2108,10 @@ function initDashboard(){
   })
   // topbar home button
   document.getElementById('btnDash')?.addEventListener('click', backToDashboard)
+  // neural cloud realm
+  document.getElementById('btnCloud')?.addEventListener('click', ()=> setScreen('cloud'))
+  document.getElementById('btnDashCloud')?.addEventListener('click', ()=> setScreen('cloud'))
+  try{ initCloudView({ toast }) }catch(e){ console.warn('cloud view init failed', e) }
   // initial paint
   setScreen('dashboard')
 }

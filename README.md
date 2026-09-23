@@ -5,7 +5,7 @@
 > Gerçek zamanlı AI sohbet, dudak senkronlu TTS ve fizikli interaktif MMD waifu (Ellen / Jane / Zhu).  
 > **Teknolojiler:** Three.js + MMDLoader + Bullet (`ammo.js`) · FastAPI + WebSockets · OpenRouter/Groq · Kokoro/ElevenLabs · 60fps viseme
 
-![Version](https://img.shields.io/badge/version-EU--0.5.0--01-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-3.11+-yellow) ![License](https://img.shields.io/badge/license-private-lightgrey)
+![Version](https://img.shields.io/badge/version-EU--0.6.0--01-blue) ![Node](https://img.shields.io/badge/node-%3E%3D18-green) ![Python](https://img.shields.io/badge/python-3.11+-yellow) ![License](https://img.shields.io/badge/license-private-lightgrey)
 
 **Canlı:** Frontend `http://localhost:5173` → `/health` `/api/*` `/ws` isteklerini `waifu-viewer/vite.config.js:388` üzerinden Backend `http://localhost:8000` adresine proxy'ler.
 
@@ -22,6 +22,7 @@
 - **Test (Benchmark)** — tek tık PC testi (kurulum 4. adım + Ayarlar → Uygulama): CPU/GPU stresi, RAM, WebGL2/3D-oda desteği, TTS + backend; DPR/gölge/fps sınırını otomatik ayarlar (`waifu-viewer/src/services/benchmark.js`)
 - **Eklentiler** — ihtiyaç anında yüklenen opsiyonel eklentiler (kayıt `waifu-viewer/public/extensions.json`, test için yerel). 18+ paketler açılmadan bulanık kalır (Ayarlar → Eklentiler)
 - **Basit / Geliştirici modları** — varsayılan sade son kullanıcı arayüzü; 🛠 Geliştirici modu fizik yerçekimi, ışık ince ayarı, kamera sönümü ve hata ayıklama araçlarını açar
+- **Neural Cloud** — yüklenen her dosyanın (resim, belge) düğüm olduğu tam ekran ağ âlemi: resimler bir kez ücretsiz görü yönlendiricisiyle anlatılır (`openrouter/free`, sohbet modeli değişmez), belgeler metne çevrilir; yapay zekâ içerikleri yalnızca gerektiğinde araç çağrılarıyla okur, ayrıca günlük araçlar (saat, tarih, hesap makinesi)
 - **Modüler motor + içerik paketleri** — uygulama sade gelir (gömülü model yok); karakterler/modeller/3D-odalar GitHub sürümünden ihtiyaç anında kurulur (**Ayarlar → Eklentiler → İçerik paketleri**, `content/packs.json`, `backend/app/api/content.py`)
 - **Masaüstü sürümler** — derlenmiş Linux (AppImage/deb) ve Windows (NSIS) yapıları GitHub sürüm etiketi olarak yayınlanır; içerik + eklentiler repodan çekilir
 - **Masaüstü** — Electron sarmalayıcı `apps/desktop/electron/main.js` otomatik `uvicorn` başlatır (sağlık kontrolü `:8000` → `:8001`)
@@ -120,8 +121,8 @@ Frontend yakınlık (affinity), grafik ve anahtarları `localStorage` içinde sa
 ## Proje Yapısı
 
 ```
-waifu-viewer/         Vite + Three/MMD (src/main.js, services/{waifu-client,morph-driver,tools,benchmark,extensions,content,i18n}, settings/, editor/WpkgEditor ihtiyaç anında yüklenen eklenti)
-backend/app/          FastAPI (main.py, api/{health,chat,wpkg,memory,keys,settings,backgrounds,version,content}, ws/talk.py, services/{llm,tts,viseme,memory/stt}, config.py, models/schemas.py, paths.py)
+waifu-viewer/         Vite + Three/MMD (src/main.js, services/{waifu-client,morph-driver,tools,benchmark,extensions,content,cloud-view,i18n}, settings/, editor/WpkgEditor ihtiyaç anında yüklenen eklenti)
+backend/app/          FastAPI (main.py, api/{health,chat,wpkg,memory,keys,settings,backgrounds,version,content,cloud}, ws/talk.py, services/{llm,tts,viseme,memory/stt,tools,neural_cloud}, config.py, models/schemas.py, paths.py)
 packages/wpkg/        .wpkg paketleme/açma + derece/etiket doğrulama (src/index.js, src/manifest.js, jszip STORE, 200MB limit, path-traversal koruması)
 apps/desktop/         Electron (electron/main.js uvicorn'u otomatik başlatır, preload.js köprüsü; electron-builder linux/win sürümleri)
 content/packs.json    İçerik paketi bildirimi (characters/models/backgrounds → GitHub sürüm zipleri)
@@ -131,7 +132,7 @@ waifu-viewer/public/extensions.json  Eklenti kaydı (test için yerel dosya)
 backgrounds/          3D odalar + dokular
 VMD_Animations/       Canlı VMD kaynağı (default_pose.vmd vb.)
 scripts/              pack-wpkg.mjs, convert-to-wpkg.mjs, version.mjs, watch-rebuild.mjs, build-frontend.mjs (sade dist), build-content-packs.mjs
-VERSION / version.json  Uygulama sürümü (EU-0.5.0-01) public/version.json + /api/version ile senkron
+VERSION / version.json  Uygulama sürümü (EU-0.6.0-01) public/version.json + /api/version ile senkron
 ```
 
 ---

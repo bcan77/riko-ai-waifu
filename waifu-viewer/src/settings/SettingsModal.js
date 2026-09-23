@@ -40,6 +40,7 @@ const TABS = [
   { id:'camera',     label:'📷 Camera' },
   { id:'audio',      label:'🔊 Audio' },
   { id:'keys',       label:'🔑 Keys' },
+  { id:'cloud',      label:'☁ Neural Cloud' },
   { id:'extensions', label:'🧩 Extensions' },
   { id:'app',        label:'⚙ App' },
 ]
@@ -311,6 +312,25 @@ export function mountSettingsModal(opts = {}){
             </div>
           </div>
 
+          <div class="settings-panel ${activeTab==='cloud'?'active':''}" data-panel="cloud">
+            <h3>${t('cloud.title')}</h3>
+            <div class="settings-card">
+              <h4>${t('cloud.upload')}</h4>
+              <div class="settings-row"><label>${t('cloud.pick')}
+                <span style="display:flex;gap:6px">
+                  <input type="file" id="cloudFileInput" accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.markdown,.csv,.json,.log,.pdf" style="flex:1">
+                  <button class="btn small primary" data-act="cloud-upload">${t('cloud.send')}</button>
+                </span></label>
+              </div>
+              <div class="settings-hint" style="margin:0" id="cloudUploadStatus">${t('cloud.formats')}</div>
+            </div>
+            <div class="settings-card" style="margin-top:10px">
+              <h4>${t('cloud.files')}</h4>
+              <div id="setCloudList"><div class="settings-hint" style="margin:0">${t('ext.loading')}</div></div>
+              <div class="settings-hint">${t('cloud.hint')}</div>
+            </div>
+          </div>
+
           <div class="settings-panel ${activeTab==='extensions'?'active':''}" data-panel="extensions">
             <h3>${t('ext.title')}</h3>
             <div class="settings-card">
@@ -388,10 +408,69 @@ export function mountSettingsModal(opts = {}){
     renderSettingsBg()
     renderExtensions()
     renderContent()
+    renderCloud()
   }
 
-  async function renderContent(){
-    const host = root.querySelector('#setContentList')
+  async function renderCloud(){
+    const host = root.querySelector('#setCloudList')
+    if(!host) return
+    let files = null
+    try{
+      const r = await fetch('/api/cloud/files', { cache: 'no-store' })
+      if(!r.ok) throw new Error('api ' + r.status)
+      files = (await r.json()).files || []
+    }catch{
+      host.innerHTML = `<div class="settings-hint" style="margin:0">${t('content.offline')}</div>`
+      return
+    }
+    if(!files.length){
+      host.innerHTML = `<div class="settings-hint" style="margin:0">${t('cloud.empty')}</div>`
+      return
+    }
+    const kb = (n) => n > 1048576 ? (n / 1048576).toFixed(1) + ' MB' : Math.max(1, Math.round(n / 1024)) + ' KB'
+    host.innerHTML = files.map(f=>`
+      <div class="ext-row" data-cloud="${f.id}">
+        <div class="ext-meta">
+          <b>${(f.name || f.id).replace(/</g, '&lt;')}</b>
+          <span><span class="rating-badge ${f.kind === 'image' ? 'r-12' : 'r-all'}">${f.kind}</span> ${kb(f.size)}${f.kind === 'image' ? (f.description ? ' • ' + t('cloud.described') : ' • ' + t('cloud.nodesc')) : (f.text_chars ? ` • ${f.text_chars} chars` : '')}</span>
+          ${f.kind === 'image' && f.description ? `<span class="cloud-desc">${f.description.slice(0, 220).replace(/</g, '&lt;')}${f.description.length > 220 ? '…' : ''}</span>` : ''}
+        </div>
+        ${f.kind === 'image' ? `<button class="btn small ghost" data-cloud-redesc="${f.id}" title="${t('cloud.redescribe')}">👁</button>` : ''}
+        <button class="btn small ghost" data-cloud-del="${f.id}">✕</button>
+      </div>`).join('')
+    host.querySelectorAll('[data-cloud-del]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        btn.disabled = true
+        try{
+          const r = await fetch('/api/cloud/files/' + encodeURIComponent(btn.dataset.cloudDel), { method: 'DELETE' })
+          if(!r.ok) throw new Error('api ' + r.status)
+          renderCloud()
+        }catch(err){
+          onAction({type:'toast', text: t('ext.failed', { e: err?.message || err })})
+          btn.disabled = false
+        }
+      })
+    })
+    host.querySelectorAll('[data-cloud-redesc]').forEach(btn=>{
+      btn.addEventListener('click', async ()=>{
+        btn.disabled = true
+        btn.textContent = '…'
+        try{
+          const r = await fetch('/api/cloud/files/' + encodeURIComponent(btn.dataset.cloudRedesc) + '/describe', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: '{}' })
+          const j = await r.json().catch(() => ({}))
+          if(!r.ok) throw new Error(j.detail || ('api ' + r.status))
+          onAction({type:'toast', text: t('cloud.describedToast', { m: j.model || 'vision' })})
+          renderCloud()
+        }catch(err){
+          onAction({type:'toast', text: t('ext.failed', { e: err?.message || err })})
+          btn.disabled = false
+          btn.textContent = '👁'
+        }
+      })
+    })
+  }
+
+  async function renderContent(){    const host = root.querySelector('#setContentList')
     if(!host) return
     let data = null
     try{ data = await fetchPacks() }catch{
@@ -730,6 +809,7 @@ export function mountSettingsModal(opts = {}){
         if(activeTab==='keys') syncKeysTab()
         if(activeTab==='graphics') renderSettingsBg()
         if(activeTab==='extensions'){ renderExtensions(); renderContent() }
+        if(activeTab==='cloud') renderCloud()
       })
     })
     // keyboard nav for tabs
@@ -840,6 +920,35 @@ export function mountSettingsModal(opts = {}){
     root.querySelector('[data-act="reset-camera"]')?.addEventListener('click', ()=> onAction({type:'resetCamera'}))
     root.querySelector('[data-act="check-health"]')?.addEventListener('click', ()=> syncAppTab())
     root.querySelector('[data-act="bench-run"]')?.addEventListener('click', runSettingsBenchmark)
+    root.querySelector('[data-act="cloud-upload"]')?.addEventListener('click', async ()=>{
+      const inp = root.querySelector('#cloudFileInput')
+      const st = root.querySelector('#cloudUploadStatus')
+      const f = inp?.files?.[0]
+      if(!f){ if(st) st.textContent = t('cloud.pickFirst'); return }
+      const btn = root.querySelector('[data-act="cloud-upload"]')
+      if(btn) btn.disabled = true
+      if(st) st.textContent = t('cloud.uploading', { n: f.name })
+      try{
+        const fd = new FormData()
+        fd.append('file', f)
+        const r = await fetch('/api/cloud/upload', { method: 'POST', body: fd })
+        const j = await r.json().catch(() => ({}))
+        if(!r.ok) throw new Error(j.detail || ('api ' + r.status))
+        const vf = j.file || {}
+        if(st){
+          st.textContent = vf.kind === 'image'
+            ? (vf.vision?.model ? t('cloud.imgDone', { m: vf.vision.model }) : t('cloud.imgNoVision', { e: vf.vision?.error || '?' }))
+            : t('cloud.docDone', { n: vf.text_chars || 0 })
+        }
+        if(inp) inp.value = ''
+        renderCloud()
+        onAction({type:'toast', text: t('cloud.uploaded')})
+      }catch(err){
+        if(st) st.textContent = t('ext.failed', { e: err?.message || err })
+        if(btn) btn.disabled = false
+      }
+      if(btn) btn.disabled = false
+    })
     root.querySelector('[data-act="check-keys"]')?.addEventListener('click', ()=> syncKeysTab())
     root.querySelector('[data-act="save-keys"]')?.addEventListener('click', ()=> saveKeysToBackend())
     root.querySelectorAll('[data-act="toggle-key"]').forEach(btn=>{

@@ -17,3 +17,7 @@ class LLMProvider(ABC):
     async def complete_json(self, messages: list[dict], model: str | None = None) -> dict:
         """Non-streaming fallback returning parsed dict."""
         ...
+
+    async def complete_with_tools(self, messages: list[dict], tools: list[dict], model: str | None = None) -> list[dict]:
+        """Non-streaming tool decision. Returns [{id, name, args}]. Default: no tools."""
+        return []

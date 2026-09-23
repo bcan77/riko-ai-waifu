@@ -23,9 +23,19 @@ for (const p of manifest.packs) {
   const dest = path.join(OUT, p.asset)
   if (fs.existsSync(dest)) fs.rmSync(dest)
   console.log(`[packs] ${p.id}: ${p.repo_dir} -> ${p.asset}`)
-  // -0 STORE is fastest for already-compressed media; zip level default otherwise.
-  // Use STORE for characters (wpkg media), DEFLATE (-9) for models/backgrounds text? keep simple: STORE all.
-  execSync(`zip -0 -qr ${JSON.stringify(dest)} .`, { cwd: src, stdio: 'inherit' })
+  // python zipfile, ZIP_STORED (no compression — media is already compressed)
+  const helper = path.join(OUT, '.zip-helper.py')
+  fs.writeFileSync(helper, `import os,zipfile,sys
+src, dest = sys.argv[1], sys.argv[2]
+with zipfile.ZipFile(dest, 'w', zipfile.ZIP_STORED) as z:
+    for root, dirs, files in os.walk(src):
+        for fn in files:
+            full = os.path.join(root, fn)
+            z.write(full, os.path.relpath(full, src))
+print('zipped', dest)
+`)
+  execSync(`python3 ${JSON.stringify(helper)} ${JSON.stringify(src)} ${JSON.stringify(dest)}`, { cwd: ROOT, stdio: 'inherit' })
+  try { fs.rmSync(helper) } catch {}
   const mb = (fs.statSync(dest).size / 1024 / 1024).toFixed(1)
   console.log(`[packs]   ${mb} MB`)
 }

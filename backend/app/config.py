@@ -31,6 +31,13 @@ class Settings(BaseSettings):
     whisper_model: str = "small"
     chroma_dir: str = "memory/chroma"
 
+    # Neural Cloud — user files for the AI + vision describer.
+    # Chat model is NEVER used for images; vision always goes through
+    # vision_model (default: OpenRouter's free router, vision-capable).
+    vision_model: str = "openrouter/free"
+    vision_fallback_model: str = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free"
+    cloud_max_mb: int = 25
+
     # Server
     port: int = 8000
     cors_origins: str = "http://localhost:5173,http://127.0.0.1:5173"

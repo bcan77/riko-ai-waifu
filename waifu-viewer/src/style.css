@@ -198,15 +198,22 @@ input[type="range"]::-webkit-slider-thumb{-webkit-appearance:none;width:15px;hei
 .loader-tip{margin-top:12px;font-size:11px;color:var(--muted);opacity:0.85;border-top:1px dashed rgba(148,163,184,0.09);padding-top:8px;display:flex;align-items:center;gap:7px}
 .loader-tip::before{content:"◆";font-size:10px;color:var(--accent)}
 
-/* ── Screens — dashboard vs stage (proper full-screen views) ────────── */
+/* ── Screens — dashboard / cloud vs stage (proper full-screen views) ── */
 #canvas{transition:opacity .35s var(--ease-out)}
-body[data-screen="dashboard"] #canvas{opacity:0;pointer-events:none}
+body[data-screen="dashboard"] #canvas,
+body[data-screen="cloud"] #canvas{opacity:0;pointer-events:none}
 body[data-screen="dashboard"] .topbar,
 body[data-screen="dashboard"] .panel,
 body[data-screen="dashboard"] .scrim,
 body[data-screen="dashboard"] .chat-bar,
-body[data-screen="dashboard"] .bg-debug{display:none!important}
-body[data-screen="stage"] #dashboard{display:none}
+body[data-screen="dashboard"] .bg-debug,
+body[data-screen="cloud"] .panel,
+body[data-screen="cloud"] .scrim,
+body[data-screen="cloud"] .chat-bar,
+body[data-screen="cloud"] .bg-debug{display:none!important}
+body:not([data-screen="dashboard"]) #dashboard{display:none}
+#cloudView{display:none}
+body[data-screen="cloud"] #cloudView{display:block}
 
 /* ── Dashboard — full-screen home ─────────────────────────────────── */
 .dashboard{position:fixed;inset:0;z-index:34;overflow:auto;background:#020617}
@@ -238,8 +245,50 @@ body[data-screen="stage"] .dashboard{display:none}
 .dash-link{align-self:flex-start;margin-top:4px}
 .dash-foot{display:flex;align-items:center;justify-content:center;gap:10px;font-size:11px;color:var(--muted2);font-family:JetBrains Mono,monospace}
 .dash-dot{opacity:.5}
+/* full-width banner card (Neural Cloud entry) */
+.dash-banner{grid-column:1 / -1;flex-direction:row!important;align-items:center;justify-content:space-between;gap:12px}
+.dash-banner-left{display:flex;align-items:center;gap:12px;min-width:0}
+.dash-banner-left .dash-ico{font-size:22px}
 @media(max-width:860px){.dash-grid{grid-template-columns:1fr 1fr}}
 @media(max-width:520px){.dash-grid{grid-template-columns:1fr}.dash-actions .btn{flex:1}}
+
+/* ══ Neural Cloud realm — mesh backdrop + node graph ════════════════ */
+.cloud-view{position:fixed;inset:0;z-index:33;overflow:hidden;background:#020617}
+#cloudMesh{position:absolute;inset:0;width:100%;height:100%}
+#cloudGraph{position:absolute;inset:0;width:100%;height:100%;touch-action:none}
+.cloud-head{position:absolute;top:0;left:0;right:0;display:flex;align-items:flex-start;justify-content:space-between;gap:12px;padding:clamp(18px,4vh,36px) clamp(16px,4vw,40px) 0;pointer-events:none;animation:fadeSlideIn .5s var(--ease-out) backwards}
+.cloud-head-actions{pointer-events:auto;display:flex;gap:8px}
+#btnCloudUpload{padding:10px 20px;border-radius:12px;font-size:13px}
+.cloud-title{margin:6px 0 4px;font-size:clamp(28px,4.6vw,44px);font-weight:800;letter-spacing:.02em;line-height:1.05}
+.cloud-title span{color:var(--accent)}
+.cloud-sub{margin:0;color:var(--muted);font-size:13px}
+.cloud-hint{position:absolute;bottom:14px;left:50%;transform:translateX(-50%);font-size:10.5px;letter-spacing:.06em;color:var(--muted2);background:rgba(8,12,22,.7);border:1px solid var(--line);padding:6px 14px;border-radius:999px;backdrop-filter:blur(8px);white-space:nowrap;pointer-events:none}
+/* graph nodes */
+.cnode{cursor:grab}
+.cnode:active{cursor:grabbing}
+.cnode circle.halo{fill:none;stroke-width:1;opacity:.35}
+.cnode circle.core{stroke-width:1.5;transition:filter .2s}
+.cnode:hover circle.core{filter:brightness(1.35)}
+.cnode.selected circle.core{stroke:#fff;stroke-width:2;filter:drop-shadow(0 0 10px currentColor)}
+.cnode text{fill:#e2e8f0;font-size:11px;font-weight:700;text-anchor:middle;pointer-events:none;font-family:Outfit,system-ui,sans-serif}
+.cnode .cicon{font-size:15px}
+.cnode .csub{fill:#7d8aa0;font-size:9px;font-weight:600}
+.clink{stroke:rgba(56,189,248,.28);stroke-width:1}
+.cnode.k-image{color:#38bdf8}.cnode.k-text{color:#4ade80}.cnode.k-pdf{color:#fbbf24}.cnode.k-core{color:#a78bfa}
+.cnode.k-image circle.core{fill:rgba(56,189,248,.14)}.cnode.k-text circle.core{fill:rgba(74,222,128,.12)}
+.cnode.k-pdf circle.core{fill:rgba(251,191,36,.12)}.cnode.k-core circle.core{fill:rgba(167,139,250,.16)}
+.cnode.k-image circle.halo{stroke:#38bdf8}.cnode.k-text circle.halo{stroke:#4ade80}
+.cnode.k-pdf circle.halo{stroke:#fbbf24}.cnode.k-core circle.halo{stroke:#a78bfa}
+/* side panel */
+.cloud-panel{position:absolute;top:clamp(120px,18vh,170px);right:clamp(12px,3vw,32px);width:min(340px,calc(100vw - 24px));max-height:calc(100dvh - 220px);overflow:auto;background:rgba(10,16,30,.92);border:1px solid rgba(148,163,184,.14);border-radius:16px;padding:14px;backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);box-shadow:0 22px 60px rgba(0,0,0,.55);animation:popIn .28s var(--ease-spring);scrollbar-width:thin}
+.cloud-panel.hidden{display:none}
+.cloud-panel h3{margin:0 0 4px;font-size:15px;font-weight:800;word-break:break-word}
+.cloud-panel .cp-kind{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted);font-weight:800}
+.cloud-panel img{width:100%;border-radius:10px;margin:10px 0 4px;border:1px solid var(--line);display:block}
+.cloud-panel pre{white-space:pre-wrap;word-break:break-word;font-size:11.5px;line-height:1.55;color:#cbd5e1;background:rgba(2,6,16,.5);border:1px solid rgba(148,163,184,.09);border-radius:10px;padding:10px;margin:10px 0;max-height:220px;overflow:auto}
+.cloud-panel .cp-meta{font-size:11px;color:var(--muted);margin-top:6px}
+.cloud-panel .row{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+@media(max-width:640px){.cloud-panel{top:auto;bottom:52px;right:12px;left:12px;width:auto;max-height:44dvh}.cloud-hint{display:none}}
 
 /* ── Build badge — gacha style always visible ─────────────────────── */
 .build-badge{

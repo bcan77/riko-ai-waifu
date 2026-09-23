@@ -12,6 +12,7 @@ from app.api.settings import router as settings_router
 from app.api.backgrounds import router as backgrounds_router
 from app.api.version import router as version_router
 from app.api.content import router as content_router
+from app.api.cloud import router as cloud_router
 from app.ws.talk import router as ws_router
 import logging
 from pathlib import Path
@@ -51,6 +52,7 @@ app.include_router(settings_router)
 app.include_router(backgrounds_router)
 app.include_router(version_router)
 app.include_router(content_router)
+app.include_router(cloud_router)
 app.include_router(ws_router)
 
 # --- Serve /backgrounds/* static files from project backgrounds/ (and public/backgrounds fallback) ---

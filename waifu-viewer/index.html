@@ -20,6 +20,7 @@
       </div>
       <div class="topbar-right">
         <button id="btnDash" class="btn ghost small" title="Back to dashboard">⌂</button>
+        <button id="btnCloud" class="btn ghost small" title="Neural Cloud">☁</button>
         <button id="btnSettings" class="btn ghost small" title="Settings (Ctrl+,)">⚙</button>
         <span id="status" class="status">Booting…</span>
       </div>
@@ -66,12 +67,41 @@
             <button class="btn small dash-link" id="btnDashBench2">Run benchmark →</button>
           </div>
         </div>
+        <div class="dash-card dash-banner">
+          <div class="dash-banner-left">
+            <span class="dash-ico">☁</span>
+            <div>
+              <div class="dash-big" id="dashCloudTitle">Neural Cloud</div>
+              <div class="dash-meta" id="dashCloudMeta">—</div>
+            </div>
+          </div>
+          <button class="btn small dash-link" id="btnDashCloud">Open mesh →</button>
+        </div>
         <div class="dash-foot">
           <span id="dashVersion">v—</span>
           <span class="dash-dot">•</span>
           <span id="dashFootTip">Tip: <b>,</b> opens Settings • <b>P</b> toggles panel on stage</span>
         </div>
       </div>
+    </div>
+
+    <!-- Neural Cloud — full-screen mesh realm, every file a node -->
+    <div id="cloudView" class="cloud-view">
+      <canvas id="cloudMesh"></canvas>
+      <div class="cloud-head">
+        <div>
+          <div class="dash-kicker">NEURAL CLOUD</div>
+          <h1 class="cloud-title">Neural <span>Cloud</span></h1>
+          <p class="cloud-sub" id="cloudSub">Every file you upload becomes a node. Click one to inspect it.</p>
+        </div>
+        <div class="cloud-head-actions">
+          <button id="btnCloudUpload" class="btn primary">+ Upload</button>
+          <input id="cloudViewFile" type="file" hidden accept=".png,.jpg,.jpeg,.webp,.gif,.txt,.md,.markdown,.csv,.json,.log,.pdf">
+        </div>
+      </div>
+      <svg id="cloudGraph" aria-label="Neural Cloud graph"></svg>
+      <div class="cloud-hint" id="cloudHint">drag to pan • scroll to zoom • drag nodes to arrange</div>
+      <aside id="cloudPanel" class="cloud-panel hidden"></aside>
     </div>
 
     <div id="scrim" class="scrim"></div>

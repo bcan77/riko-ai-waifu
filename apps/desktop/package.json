@@ -1,12 +1,15 @@
 {
   "name": "@waifu/desktop",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "private": true,
   "type": "module",
+  "author": "bcan77",
+  "homepage": "https://github.com/bcan77/riko-ai-waifu",
   "main": "electron/main.js",
   "build": {
     "appId": "com.bcan77.compangine",
     "productName": "Compangine",
+    "artifactName": "${productName}-${version}-${arch}.${ext}",
     "files": [
       "electron/**/*",
       "package.json"
@@ -42,7 +45,8 @@
         "AppImage",
         "deb"
       ],
-      "category": "Game"
+      "category": "Game",
+      "maintainer": "bcan77"
     },
     "win": {
       "target": [

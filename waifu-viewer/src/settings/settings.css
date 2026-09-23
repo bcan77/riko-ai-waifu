@@ -59,6 +59,8 @@
 .ext-row .ext-meta b{font-size:13px}
 .ext-row .ext-meta span{display:block;font-size:11px;color:var(--muted);margin-top:2px;line-height:1.45}
 .ext-ver{font-family:JetBrains Mono,monospace;font-size:10px;color:var(--muted2);border:1px solid var(--line);padding:3px 8px;border-radius:999px;white-space:nowrap}
+/* neural cloud file rows */
+.cloud-desc{display:block;font-size:11px;color:var(--muted);line-height:1.5;margin-top:4px;background:rgba(14,165,233,0.05);border:1px solid rgba(14,165,233,0.09);border-radius:8px;padding:6px 8px}
 .settings-kv dt{color:var(--muted);font-weight:600}
 .settings-kv dd{margin:0;color:var(--text);word-break:break-all}
 .settings-vmd-mini{max-height:220px;overflow:auto;display:flex;flex-direction:column;gap:6px;margin-top:8px}

@@ -57,6 +57,32 @@ class OpenRouterProvider(LLMProvider):
                 if delta:
                     yield delta
 
+    async def complete_with_tools(self, messages: list[dict], tools: list[dict], model: str | None = None) -> list[dict]:
+        client = self._get_client()
+        m = model or self.model
+        body: dict = {"reasoning": {"exclude": True}}
+        if "openai" not in m:
+            # keep JSON parseable even when the model also emits tool calls
+            body["response_format"] = {"type": "json_object"}
+        resp = await client.chat.completions.create(
+            model=m,
+            messages=messages,
+            tools=tools,
+            tool_choice="auto",
+            temperature=0.2,
+            max_tokens=300,
+            extra_body=body,
+        )
+        msg = resp.choices[0].message
+        out = []
+        for tc in (msg.tool_calls or []):
+            try:
+                args = json.loads(tc.function.arguments or "{}")
+            except Exception:
+                args = {}
+            out.append({"id": tc.id, "name": tc.function.name, "args": args if isinstance(args, dict) else {}})
+        return out
+
     async def complete_json(self, messages: list[dict], model: str | None = None) -> dict:
         client = self._get_client()
         m = model or self.model

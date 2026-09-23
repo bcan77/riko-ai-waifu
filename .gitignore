@@ -3,6 +3,12 @@ backend/.env
 backend/user_keys.json
 backend/user_settings.json
 
+# User uploads / runtime content (per-machine, never committed)
+# NOTE: anchored to repo root only — backend/app/services/neural_cloud/ is SOURCE
+/neural_cloud/
+dist-packs/
+EXAMPLE_NEURAL_CLOUD_IMAGES/
+
 # Deps / build
 node_modules/
 waifu-viewer/dist/

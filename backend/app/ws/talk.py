@@ -2,7 +2,8 @@ import asyncio, json, base64, re, time
 from fastapi import APIRouter, WebSocket, WebSocketDisconnect
 from app.ws.manager import manager
 from app.services.llm.prompts import build_messages, parse_llm_json, strip_thinking, _clean_text_field
-from app.services.llm.factory import stream_with_fallback
+from app.services.llm.factory import stream_with_fallback, decide_tools
+from app.services.tools.registry import execute_tool, FRONTEND_TOOLS
 from app.services.tts.factory import get_tts_for_request
 from app.services.tts.kokoro import HAS_KOKORO, KokoroProvider
 from app.services.tts.voices import resolve_voice, is_japanese
@@ -21,6 +22,37 @@ async def pipeline(ws: WebSocket, client_id: str, user_text: str, model_id: str,
     try:
         await manager.send_json(client_id, {"type": "llm_start"})
         messages = build_messages(user_text, model_id=model_id)
+        # Phase 0 — tool decision: one cheap non-streamed pass. Backend tools
+        # (time/date/calc/cloud/memory) execute here; frontend tools
+        # (morph/vmd/prosody) are forwarded over WS and applied live.
+        # File CONTENTS are only pulled now, never baked into the prompt.
+        try:
+            _tool_calls = await decide_tools(messages, model_override=llm_model)
+        except Exception:
+            _tool_calls = []
+        if _tool_calls:
+            _tool_results = []
+            for _tc in _tool_calls:
+                _name, _args = _tc["name"], _tc.get("args") or {}
+                if _name in FRONTEND_TOOLS:
+                    try:
+                        await manager.send_json(client_id, {"type": "tool", "name": _name, "args": _args})
+                    except Exception:
+                        pass
+                    _payload = {"ok": True, "applied": "frontend"}
+                else:
+                    try:
+                        _payload = await execute_tool(_name, _args)
+                    except Exception as _e:
+                        _payload = {"error": str(_e)[:300]}
+                _tool_results.append({"role": "tool", "tool_call_id": _tc["id"],
+                                      "name": _name, "content": json.dumps(_payload)[:4000]})
+            messages = list(messages) + [{
+                "role": "assistant", "content": None,
+                "tool_calls": [{"id": _tc["id"], "type": "function",
+                                "function": {"name": _tc["name"], "arguments": json.dumps(_tc.get("args") or {})}}
+                               for _tc in _tool_calls],
+            }] + _tool_results
         buf = ""
         full_json_raw = ""
         # guard reasoning leaks: tag-based + plain-English preamble

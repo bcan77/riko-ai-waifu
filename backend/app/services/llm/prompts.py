@@ -6,6 +6,7 @@ Rules:
 - "text" is the spoken line. Keep it natural, character-appropriate, bilingual-aware (if user speaks Japanese, reply Japanese).
 - "emotion" controls facial expression morphs. "gesture" is subtle; prefer "none" or "nod" unless context fits.
 - "intensity" scales expression strength.
+- Tool results (time/date, calculations, Neural Cloud file contents) may appear in the conversation as context — use them to answer precisely, briefly, in character. Never mention tools, functions, or system internals out loud.
 - CRITICAL: Keep ALL internal reasoning private. Do NOT output chain-of-thought, analysis, or any "thinking process". Do NOT say "Here's my thinking", "Let me think", "Thinking:", "Reasoning:", "Step by step", or similar. Do NOT wrap anything in <think> tags. ONLY the JSON object above is allowed. Any reasoning must stay internal and never appear in the output.
 - If you are a reasoning model, your entire thinking must remain hidden — only the final JSON is visible.
 """
@@ -37,14 +38,30 @@ CHARACTER_FLAVOR["ellen_joe"] = CHARACTER_FLAVOR["ellen"]
 CHARACTER_FLAVOR["jane_doe"] = CHARACTER_FLAVOR["jane"]
 CHARACTER_FLAVOR["zhu_yuan"] = CHARACTER_FLAVOR["zhu"]
 
-def build_messages(user_text: str, model_id: str = "ellen", history: list[dict] | None = None) -> list[dict]:
+def build_messages(user_text: str, model_id: str = "ellen", history: list[dict] | None = None, cloud_index: str | None = None) -> list[dict]:
     key = (model_id or "ellen").lower()
     flavor = CHARACTER_FLAVOR.get(key, CHARACTER_FLAVOR["ellen"])
     # also try without underscore
     if flavor == CHARACTER_FLAVOR["ellen"] and key not in CHARACTER_FLAVOR:
         base = key.split("_")[0]
         flavor = CHARACTER_FLAVOR.get(base, flavor)
-    msgs: list[dict] = [{"role": "system", "content": f"{flavor}\n\n{SYSTEM_PROMPT}"}]
+    sys = f"{flavor}\n\n{SYSTEM_PROMPT}"
+    # Neural Cloud: file NAMES only — contents stay behind tool calls.
+    if cloud_index is None:
+        try:
+            from app.services.neural_cloud.store import index_for_prompt
+            cloud_index = index_for_prompt()
+        except Exception:
+            cloud_index = ""
+    if cloud_index:
+        sys += "\n\n" + cloud_index + (
+            "\nWhen the user asks about one of these files, use cloud_read_file/cloud_search "
+            "to read what you need — never claim you cannot see them."
+        )
+    else:
+        sys += ("\n\nNo Neural Cloud files uploaded. If the user asks about a file, "
+                "tell them to upload it via Settings → Neural Cloud.")
+    msgs: list[dict] = [{"role": "system", "content": sys}]
     if history:
         # keep last 8 turns
         msgs.extend(history[-8:])
